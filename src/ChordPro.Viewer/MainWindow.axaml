@@ -3,6 +3,7 @@
         xmlns:core="using:ChordPro.Core"
         x:Class="ChordPro.Viewer.MainWindow"
         Title="ChordPro Viewer"
+        Icon="/Assets/AppIcon.png"
         Width="1100" Height="900"
         DragDrop.AllowDrop="True">
     <Window.Styles>

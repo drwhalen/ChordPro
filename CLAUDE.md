@@ -14,6 +14,7 @@ export. The developer works on macOS (Apple Silicon); WPF/WinForms are not optio
 dotnet build                                   # whole solution (ChordPro.slnx)
 dotnet test                                    # Core unit tests (xUnit)
 dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
+scripts/package-mac.sh [arm64|x64]             # artifacts/ChordPro Viewer.app + .zip + .dmg
 ```
 
 Keep the build at zero warnings. NuGet versions are pinned exactly (Avalonia 11.3.20 for every
@@ -73,5 +74,10 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   before re-rendering.
 - `Avalonia.Skia.Helpers.DrawingContextHelper.RenderAsync` overwrites the canvas matrix, so the PDF is
   recorded once into an `SKPicture` and drawn per page with translate/clip.
+- **Mac bundle:** everything `dotnet publish` produces goes in `Contents/MacOS`, and macOS treats every
+  file there as code, so each file (including `.dll`s) must be signed before the bundle itself, or
+  `codesign --verify` fails. Finder opens files through `IActivatableLifetime` / `FileActivatedEventArgs`
+  (handled in `App`), not command-line arguments. `packaging/macos/Info.plist` holds the bundle ID,
+  document types and microphone usage text; the icon is generated from `Assets/AppIcon.png`.
 - Python `str.replace` in edit scripts fails silently on a mismatch; assert the old text occurs exactly
   once before replacing.

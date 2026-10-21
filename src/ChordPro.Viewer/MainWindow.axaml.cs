@@ -846,8 +846,14 @@ public partial class MainWindow : Window
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
-        if (e.DataTransfer.TryGetFile()?.TryGetLocalPath() is not { } path)
-            return;
+        if (e.DataTransfer.TryGetFile()?.TryGetLocalPath() is { } path)
+            OpenPath(path);
+    }
+
+    /// <summary>Opens a song, a setlist, or a folder as the library (from Finder, drag and drop, …).</summary>
+    public void OpenPath(string path)
+    {
+        Activate();
         if (Path.GetExtension(path).Equals(Setlist.FileExtension, StringComparison.OrdinalIgnoreCase))
             OpenSetlist(path);
         else if (Directory.Exists(path))

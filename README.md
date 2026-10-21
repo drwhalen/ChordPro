@@ -11,6 +11,23 @@ dotnet run --project src/ChordPro.Viewer                          # reopens the 
 dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
 ```
 
+## Mac app
+
+```sh
+scripts/package-mac.sh          # this Mac's architecture (arm64 on Apple Silicon)
+scripts/package-mac.sh x64      # Intel Macs
+```
+
+This builds `artifacts/ChordPro Viewer.app` (self-contained, no .NET install needed) plus a `.zip` and a
+`.dmg`. Drag the app to Applications. It opens `.cho`, `.chopro`, `.chordpro`, `.crd`, `.pro` and
+`.setlist` files from Finder (double-click or "Open With"), and asks for the microphone in its own name
+for the tuner and Follow audio.
+
+The app is ad-hoc signed, which is enough to run it on the Mac that built it. To share it without
+Gatekeeper warnings, sign it with an Apple Developer ID certificate (hardened runtime, with the
+`com.apple.security.device.audio-input` entitlement for the microphone) and notarize it with
+`xcrun notarytool`. The version comes from `<Version>` in `src/ChordPro.Viewer/ChordPro.Viewer.csproj`.
+
 ## Features
 
 | Toolbar / sidebar | What it does |
