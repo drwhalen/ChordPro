@@ -6,12 +6,14 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="TextBrush" Color="#18181B" />
                     <SolidColorBrush x:Key="ChordBrush" Color="#C2410C" />
                     <SolidColorBrush x:Key="ChorusBarBrush" Color="#D4D4D8" />
                     <SolidColorBrush x:Key="CommentBackgroundBrush" Color="#EDEDF0" />
                     <SolidColorBrush x:Key="CommentBoxBrush" Color="#A1A1AA" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="TextBrush" Color="#E4E4E7" />
                     <SolidColorBrush x:Key="ChordBrush" Color="#FB923C" />
                     <SolidColorBrush x:Key="ChorusBarBrush" Color="#52525B" />
                     <SolidColorBrush x:Key="CommentBackgroundBrush" Color="#2E2E33" />

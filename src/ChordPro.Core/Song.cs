@@ -1,3 +1,5 @@
+using ChordPro.Core.Chords;
+
 namespace ChordPro.Core;
 
 /// <summary>A parsed ChordPro song: metadata plus an ordered list of sections.</summary>
@@ -10,11 +12,15 @@ public sealed class Song
     public string? Capo => GetMeta("capo");
     public string? Tempo => GetMeta("tempo");
     public string? Time => GetMeta("time");
+    public string? Duration => GetMeta("duration");
 
     /// <summary>All metadata values, keyed by canonical directive name (e.g. "title", "artist").</summary>
     public Dictionary<string, List<string>> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public List<Section> Sections { get; } = [];
+
+    /// <summary>Guitar fingerings declared in the file with <c>{define}</c>, keyed by chord name.</summary>
+    public Dictionary<string, ChordShape> ChordDefinitions { get; } = [];
 
     public string? GetMeta(string name) =>
         Metadata.TryGetValue(name, out var values) && values.Count > 0 ? values[0] : null;

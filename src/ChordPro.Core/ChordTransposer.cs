@@ -9,9 +9,9 @@ public static partial class ChordTransposer
     private static readonly string[] FlatNotes = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
     private static readonly int[] LetterSemitones = [9, 11, 0, 2, 4, 5, 7]; // A B C D E F G
 
-    // Keys conventionally written with flats.
+    // Keys conventionally written with flats. (F#/Gb could go either way; F# is more usual on guitar.)
     private static readonly HashSet<string> FlatKeys =
-        ["F", "Bb", "Eb", "Ab", "Db", "Gb", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm"];
+        ["F", "Bb", "Eb", "Ab", "Db", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm"];
 
     // Root note, the rest of the chord, and an optional slash bass note.
     [GeneratedRegex(@"^(?<root>[A-G][#b♯♭]?)(?<quality>[^/]*)(?:/(?<bass>[A-G][#b♯♭]?)(?<bassRest>.*))?$")]

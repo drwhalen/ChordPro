@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ChordPro.Core.Chords;
 
 namespace ChordPro.Core;
 
@@ -134,6 +135,11 @@ public static partial class ChordProParser
                     StartSection(new Section(SectionKind.None));
                     break;
 
+                case "define" or "chord":
+                    if (ParseDefinition(value) is var (chordName, shape))
+                        song.ChordDefinitions[chordName] = shape;
+                    break;
+
                 default:
                     if (MetaAliases.TryGetValue(name, out var metaName) && value.Length > 0)
                         song.AddMeta(metaName, value);
@@ -170,6 +176,49 @@ public static partial class ChordProParser
             segments.Add(new ChordSegment(chord, rest));
 
         return new LyricLine(segments);
+    }
+
+    /// <summary>
+    /// Parses a chord definition such as <c>Am base-fret 1 frets x 0 2 2 1 0 fingers 0 0 2 3 1 0</c>.
+    /// Fret numbers are relative to the base fret, as in the ChordPro spec.
+    /// </summary>
+    public static (string Name, ChordShape Shape)? ParseDefinition(string value)
+    {
+        var tokens = value.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 3)
+            return null;
+
+        var baseFret = 1;
+        List<int>? frets = null;
+        for (var i = 1; i < tokens.Length; i++)
+        {
+            if (tokens[i] == "base-fret" && i + 1 < tokens.Length && int.TryParse(tokens[i + 1], out var b))
+            {
+                baseFret = Math.Max(1, b);
+                i++;
+            }
+            else if (tokens[i] == "frets")
+            {
+                frets = [];
+                while (i + 1 < tokens.Length && TryParseFret(tokens[i + 1], out var fret))
+                {
+                    frets.Add(fret);
+                    i++;
+                }
+            }
+        }
+
+        if (frets is not { Count: > 0 })
+            return null;
+
+        var absolute = frets.Select(f => f > 0 ? f + baseFret - 1 : f).ToArray();
+        return (tokens[0], new ChordShape(absolute));
+
+        static bool TryParseFret(string token, out int fret)
+        {
+            fret = -1;
+            return token is "x" or "X" or "N" or "-1" || int.TryParse(token, out fret);
+        }
     }
 
     private static bool TryParseSectionDirective(string name, out SectionKind kind, out bool isStart)

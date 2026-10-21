@@ -1,26 +1,141 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="using:ChordPro.Core"
         x:Class="ChordPro.Viewer.MainWindow"
         Title="ChordPro Viewer"
-        Width="800" Height="900"
+        Width="1100" Height="900"
         DragDrop.AllowDrop="True">
+    <Window.Styles>
+        <Style Selector="WrapPanel.toolbar > StackPanel">
+            <Setter Property="Margin" Value="0,3,18,3" />
+        </Style>
+        <Style Selector="WrapPanel.toolbar > StackPanel > :is(Control)">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+        <Style Selector="Button.value">
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel.buttons > Button">
+            <Setter Property="Margin" Value="0,0,6,6" />
+        </Style>
+    </Window.Styles>
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="core:SongInfo" x:DataType="core:SongInfo">
+            <StackPanel Margin="0,2">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Artist}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding Artist, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            </StackPanel>
+        </DataTemplate>
+    </Window.DataTemplates>
+
     <DockPanel>
-        <Border DockPanel.Dock="Top" Padding="12,8"
+        <Border x:Name="Toolbar" DockPanel.Dock="Top" Padding="12,5"
                 BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Open…" Click="OnOpenClick" />
-                <Button Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />
-                <Button Content="A+" Click="OnZoomInClick" ToolTip.Tip="Larger text" />
-                <Border Width="1" Margin="4,4" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-                <TextBlock Text="Transpose" VerticalAlignment="Center" Opacity="0.6" />
-                <Button Content="−" Click="OnTransposeDownClick" ToolTip.Tip="Transpose down a semitone" />
-                <Button x:Name="TransposeResetButton" Content="0" MinWidth="40"
-                        HorizontalContentAlignment="Center" IsEnabled="False"
-                        Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
-                <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
-                <TextBlock x:Name="FileNameText" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.6" />
-            </StackPanel>
+            <WrapPanel Classes="toolbar">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ToggleButton x:Name="SidebarToggle" Content="Songs" Click="OnSidebarToggleClick" ToolTip.Tip="Show or hide the song list" />
+                    <Button Content="Open…" Click="OnOpenClick" />
+                    <Button Content="PDF…" Click="OnExportPdfClick" ToolTip.Tip="Save as PDF to print or share" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />
+                    <Button Content="A+" Click="OnZoomInClick" ToolTip.Tip="Larger text" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="label" Text="Transpose" />
+                    <Button Content="−" Click="OnTransposeDownClick" ToolTip.Tip="Transpose down a semitone" />
+                    <Button x:Name="TransposeResetButton" Classes="value" Content="0" IsEnabled="False"
+                            Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
+                    <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="label" Text="Capo" />
+                    <Button Content="−" Click="OnCapoDownClick" ToolTip.Tip="Capo one fret lower" />
+                    <Button x:Name="CapoResetButton" Classes="value" Content="0" IsEnabled="False"
+                            Click="OnCapoResetClick" ToolTip.Tip="Reset to the song's capo" />
+                    <Button Content="+" Click="OnCapoUpClick" ToolTip.Tip="Capo one fret higher (chords change, pitch stays)" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Auto-scroll (Space)" />
+                    <Button Content="−" Click="OnScrollSlowerClick" ToolTip.Tip="Scroll slower" />
+                    <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="34" TextAlignment="Center" />
+                    <Button Content="+" Click="OnScrollFasterClick" ToolTip.Tip="Scroll faster" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Content="View ▾">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft">
+                                <StackPanel Spacing="6" MinWidth="180">
+                                    <CheckBox x:Name="ShowChordsCheck" Content="Show chords" IsCheckedChanged="OnViewOptionChanged" />
+                                    <CheckBox x:Name="ShowDiagramsCheck" Content="Chord diagrams" IsCheckedChanged="OnViewOptionChanged" />
+                                    <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
+                                    <RadioButton x:Name="GuitarRadio" GroupName="Instrument" Content="Guitar" IsCheckedChanged="OnViewOptionChanged" />
+                                    <RadioButton x:Name="UkuleleRadio" GroupName="Instrument" Content="Ukulele" IsCheckedChanged="OnViewOptionChanged" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <ToggleButton x:Name="StageToggle" Content="Stage" Click="OnStageToggleClick" ToolTip.Tip="Full screen, large text, two columns (Esc to exit)" />
+                    <TextBlock x:Name="StatusText" Classes="label" Margin="6,3,0,3" />
+                </StackPanel>
+            </WrapPanel>
+        </Border>
+
+        <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="280"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <TabControl Padding="10,4,10,10">
+                <TabItem Header="Library" FontSize="15">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                            <WrapPanel Classes="buttons">
+                                <Button Content="Choose folder…" Click="OnChooseFolderClick" />
+                                <Button Content="Refresh" Click="OnRefreshLibraryClick" />
+                            </WrapPanel>
+                            <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="CharacterEllipsis" />
+                            <TextBox x:Name="SearchBox" Watermark="Search title, artist…" TextChanged="OnSearchChanged" />
+                        </StackPanel>
+                        <ListBox x:Name="LibraryList" SelectionChanged="OnSongListSelectionChanged" />
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="Recent" FontSize="15">
+                    <ListBox x:Name="RecentList" SelectionChanged="OnSongListSelectionChanged" />
+                </TabItem>
+
+                <TabItem Header="Setlist" FontSize="15">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                            <TextBlock x:Name="SetlistNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <WrapPanel Classes="buttons">
+                                <Button Content="New" Click="OnNewSetlistClick" />
+                                <Button Content="Open…" Click="OnOpenSetlistClick" />
+                                <Button Content="Save as…" Click="OnSaveSetlistClick" />
+                            </WrapPanel>
+                            <WrapPanel Classes="buttons">
+                                <Button Content="+ Add" Click="OnAddToSetlistClick" ToolTip.Tip="Add the open song" />
+                                <Button Content="Remove" Click="OnRemoveFromSetlistClick" />
+                                <Button Content="↑" Click="OnMoveUpClick" ToolTip.Tip="Move up" />
+                                <Button Content="↓" Click="OnMoveDownClick" ToolTip.Tip="Move down" />
+                            </WrapPanel>
+                        </StackPanel>
+                        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,8,*" Margin="0,8,0,0">
+                            <Button Grid.Column="0" Content="◀ Previous" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    Click="OnPreviousSongClick" ToolTip.Tip="Previous song (←)" />
+                            <Button Grid.Column="2" Content="Next ▶" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    Click="OnNextSongClick" ToolTip.Tip="Next song (→)" />
+                        </Grid>
+                        <ListBox x:Name="SetlistList" SelectionChanged="OnSongListSelectionChanged" />
+                    </DockPanel>
+                </TabItem>
+            </TabControl>
         </Border>
 
         <ScrollViewer x:Name="SongScroller"

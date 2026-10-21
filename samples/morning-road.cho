@@ -1,0 +1,41 @@
+# An original sample song showing capo, chord definitions and duration.
+{title: Morning Road}
+{artist: Sample Band}
+{key: D}
+{capo: 2}
+{tempo: 100}
+{duration: 3:10}
+{define: Dsus4 base-fret 1 frets x x 0 2 3 3}
+
+{c: Intro}
+[D] [Dsus4] [D] [A]
+
+{start_of_verse: Verse 1}
+[D]Sun comes up on the [G]old dirt road
+[Bm]Coffee's warm and the [A]wind is slow
+[D]Every mile is a [G]song I know
+[Em]Carry me [A]home
+{end_of_verse}
+
+{start_of_chorus}
+[G]Oh, the [D]morning road
+[A]Takes me [Bm]where I go
+[G]Light is [D]soft and [A]low
+{end_of_chorus}
+
+{start_of_verse: Verse 2}
+[D]Fields of gold where the [G]rivers bend
+[Bm]Every stranger [A]feels like a friend
+[D]Every ending's a [G]start again
+[Em]Carry me [A]home
+{end_of_verse}
+
+{chorus}
+
+{start_of_bridge}
+[Bm]Slow it [A]down, [G]let it [D]ring
+[Em7]Hear the [A7sus4]morning [A7]sing
+{end_of_bridge}
+
+{chorus: Final chorus}
+{cb: End on D}
