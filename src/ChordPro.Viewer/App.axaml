@@ -1,0 +1,27 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ChordPro.Viewer.App"
+             RequestedThemeVariant="Default">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ChordBrush" Color="#C2410C" />
+                    <SolidColorBrush x:Key="ChorusBarBrush" Color="#D4D4D8" />
+                    <SolidColorBrush x:Key="CommentBackgroundBrush" Color="#EDEDF0" />
+                    <SolidColorBrush x:Key="CommentBoxBrush" Color="#A1A1AA" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ChordBrush" Color="#FB923C" />
+                    <SolidColorBrush x:Key="ChorusBarBrush" Color="#52525B" />
+                    <SolidColorBrush x:Key="CommentBackgroundBrush" Color="#2E2E33" />
+                    <SolidColorBrush x:Key="CommentBoxBrush" Color="#71717A" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

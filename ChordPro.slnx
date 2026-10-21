@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ChordPro.Core/ChordPro.Core.csproj" />
+    <Project Path="src/ChordPro.Viewer/ChordPro.Viewer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ChordPro.Core.Tests/ChordPro.Core.Tests.csproj" />
+  </Folder>
+</Solution>

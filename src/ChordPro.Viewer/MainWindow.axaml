@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ChordPro.Viewer.MainWindow"
+        Title="ChordPro Viewer"
+        Width="800" Height="900"
+        DragDrop.AllowDrop="True">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="12,8"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Open…" Click="OnOpenClick" />
+                <Button Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />
+                <Button Content="A+" Click="OnZoomInClick" ToolTip.Tip="Larger text" />
+                <Border Width="1" Margin="4,4" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+                <TextBlock Text="Transpose" VerticalAlignment="Center" Opacity="0.6" />
+                <Button Content="−" Click="OnTransposeDownClick" ToolTip.Tip="Transpose down a semitone" />
+                <Button x:Name="TransposeResetButton" Content="0" MinWidth="40"
+                        HorizontalContentAlignment="Center" IsEnabled="False"
+                        Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
+                <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
+                <TextBlock x:Name="FileNameText" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.6" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer x:Name="SongScroller"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ContentControl x:Name="SongHost" Padding="32,24" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>
