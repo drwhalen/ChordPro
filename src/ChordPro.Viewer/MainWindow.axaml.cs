@@ -35,6 +35,7 @@ public partial class MainWindow : Window
 
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly SmartScroller _scroller;
+    private TunerWindow? _tuner;
     private readonly Flyout _chordFlyout = new() { Placement = PlacementMode.Bottom, ShowMode = FlyoutShowMode.Standard };
     private readonly DispatcherTimer _reloadTimer;
     private FileSystemWatcher? _watcher;
@@ -299,6 +300,22 @@ public partial class MainWindow : Window
     // ---- Chord popups and capo suggestions -----------------------------------------------------
 
     private Instrument CurrentInstrument => Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar;
+
+    private void OnTunerClick(object? sender, RoutedEventArgs e)
+    {
+        if (_tuner is not null)
+        {
+            _tuner.Activate();
+            return;
+        }
+        _tuner = new TunerWindow(CurrentInstrument, SongPalette.FromTheme(CurrentTheme), _settings.TunerReference, reference =>
+        {
+            _settings.TunerReference = reference;
+            _settings.Save();
+        });
+        _tuner.Closed += (_, _) => _tuner = null;
+        _tuner.Show(this);
+    }
 
     private void ShowChordPopup(ChordTap tap)
     {
@@ -796,6 +813,7 @@ public partial class MainWindow : Window
             {
                 case Key.O: OnOpenClick(this, e); break;
                 case Key.P: OnExportPdfClick(this, e); break;
+                case Key.T: OnTunerClick(this, e); break;
                 case Key.OemPlus or Key.Add: SetFontSize(_fontSize + 2); break;
                 case Key.OemMinus or Key.Subtract: SetFontSize(_fontSize - 2); break;
                 default: return;
@@ -1095,6 +1113,7 @@ public partial class MainWindow : Window
         _watcher?.Dispose();
         _scroller.Stop();
         _audio?.Dispose();
+        _tuner?.Close();
         base.OnClosed(e);
     }
 }

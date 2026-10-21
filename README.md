@@ -28,6 +28,7 @@ dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
 | **Theme** | System (follows light/dark), Day, Night, three high-contrast themes (black on white, white on black, yellow on black) and an all-red Night vision theme for dark stages. **New theme…** opens an editor with color pickers, a live preview and WCAG contrast ratings (7:1 and up is high contrast); your themes are saved and can be edited or deleted. Themes other than Day/Night recolor the whole window, not just the song. |
 | **Stage** | Full screen, larger text, and two columns on wide screens. Esc to exit. |
 | **PDF…** | Save a print-ready PDF (Letter or A4 by region) and open it in your PDF viewer to print. |
+| **Tuner** | A chromatic tuner using the microphone: the note, a cents needle (green within ±5 cents), "tune up / tune down", the frequency, and your instrument's strings (guitar EADGBE or ukulele GCEA) with the matching one highlighted. The A4 reference is adjustable (440 Hz by default). |
 
 Page layout: a chord is never separated from its lyric. Printed pages and on-screen page turns keep a
 section (a chorus, a verse) together whenever it fits; a longer section breaks between lines with at least
@@ -39,7 +40,7 @@ It also:
 - reloads the song when it is saved in another editor, keeping your place;
 - opens songs, setlists or a library folder dropped onto the window.
 
-Shortcuts: ⌘/Ctrl+O open, ⌘/Ctrl+P PDF, ⌘/Ctrl +/− text size, Space start/stop scrolling (page down in manual mode),
+Shortcuts: ⌘/Ctrl+O open, ⌘/Ctrl+P PDF, ⌘/Ctrl+T tuner, ⌘/Ctrl +/− text size, Space start/stop scrolling (page down in manual mode),
 Page Up/Down turn pages, ← → setlist, Esc leave stage mode.
 
 ## Timing markup for scrolling
@@ -70,7 +71,8 @@ suspensions, extensions, slash chords), for guitar (EADGBE) or ukulele (GCEA).
 ## Layout
 
 - `src/ChordPro.Core`: song model, `ChordProParser`, `ChordTransposer`, chord theory and diagram search
-  (`Chords/`), themes and contrast checks (`Themes/`), scroll timing and tempo tracking (`Scrolling/`), `Setlist`, `SongLibrary`. No UI dependencies.
+  (`Chords/`), themes and contrast checks (`Themes/`), scroll timing and tempo tracking (`Scrolling/`),
+  pitch detection for the tuner (`Tuning/`), page breaks (`Layout/`), `Setlist`, `SongLibrary`. No UI dependencies.
 - `src/ChordPro.Viewer`: Avalonia UI. `SongRenderer` turns a `Song` into controls, `ChordDiagram` draws
   fretboards, `SmartScroller` and `ScrollTimelineBuilder` (scroll modes), `AudioFollower` (microphone
   via PortAudio), `PdfExporter` (Skia vector PDF), `AppSettings` (JSON settings),

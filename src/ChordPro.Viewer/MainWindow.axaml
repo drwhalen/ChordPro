@@ -51,6 +51,7 @@
                     <ToggleButton x:Name="SidebarToggle" Content="Songs" Click="OnSidebarToggleClick" ToolTip.Tip="Show or hide the song list" />
                     <Button Content="Open…" Click="OnOpenClick" />
                     <Button Content="PDF…" Click="OnExportPdfClick" ToolTip.Tip="Save as PDF to print or share" />
+                    <Button Content="Tuner" Click="OnTunerClick" ToolTip.Tip="Tune your instrument with the microphone (⌘/Ctrl+T)" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />

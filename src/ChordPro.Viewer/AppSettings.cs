@@ -35,6 +35,8 @@ public sealed class AppSettings
     public bool ShowChords { get; set; } = true;
     public bool ShowDiagrams { get; set; }
     public bool SimplifyChords { get; set; }
+    /// <summary>The tuner's reference pitch for A4, in Hz.</summary>
+    public double TunerReference { get; set; } = 440;
     public string Instrument { get; set; } = "Guitar";
     public bool SidebarVisible { get; set; } = true;
     public string Theme { get; set; } = SongTheme.SystemThemeName;
