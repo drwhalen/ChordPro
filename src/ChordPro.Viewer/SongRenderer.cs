@@ -42,6 +42,8 @@ public sealed record RenderOptions
     public SongPalette Palette { get; init; } = SongPalette.FromTheme(SongTheme.Day);
     /// <summary>Show easier forms of chords (Cmaj9 → C, Am7 → Am, G/B → G).</summary>
     public bool SimplifyChords { get; init; }
+    /// <summary>The file's <c>{key}</c> is the key heard with its capo on (LivePrompter), not the key of the chords as written.</summary>
+    public bool KeyIncludesCapo { get; init; }
     /// <summary>Called when a chord or diagram is tapped; null makes chords not tappable (e.g. printing).</summary>
     public Action<ChordTap>? ChordTapped { get; init; }
 }
@@ -60,6 +62,7 @@ public sealed partial class SongRenderer(RenderOptions options)
 
     private int _shift;
     private bool? _preferFlats;
+    private string? _writtenKey;
     private Song? _song;
 
     /// <summary>
@@ -80,7 +83,8 @@ public sealed partial class SongRenderer(RenderOptions options)
         // Chords are written as shapes for the file's capo; re-spell them for the player's capo and transposition.
         var fileCapo = FileCapo(song);
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
-        _preferFlats = ChordTransposer.PrefersFlats(song.Key, _shift);
+        _writtenKey = ChordTransposer.WrittenKey(song.Key, fileCapo, options.KeyIncludesCapo);
+        _preferFlats = ChordTransposer.PrefersFlats(_writtenKey, _shift);
         _song = song;
         Groups.Clear();
         LineControls.Clear();
@@ -126,11 +130,12 @@ public sealed partial class SongRenderer(RenderOptions options)
         var details = new List<string>();
         if (song.Key is { } key)
         {
-            // The written key sounds a capo's worth higher; show what the audience hears.
-            details.Add($"Key: {ChordTransposer.Transpose(key, options.Transpose + fileCapo, ChordTransposer.PrefersFlats(key, options.Transpose + fileCapo))}");
+            // Show what the audience hears: the written key sounds a capo's worth higher. A key that
+            // already includes the capo keeps the file's own spelling unless the song is transposed.
+            details.Add($"Key: {ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : fileCapo))}");
         }
         if (capo > 0 || song.Capo is not null)
-            details.Add(capo > 0 && song.Key is { } k ? $"Capo: {capo} (play {TransposeChord(k)} shapes)" : $"Capo: {capo}");
+            details.Add(capo > 0 && _writtenKey is { } k ? $"Capo: {capo} (play {TransposeChord(k)} shapes)" : $"Capo: {capo}");
         if (song.Tempo is { } tempo)
             details.Add($"Tempo: {tempo}");
         if (song.Time is { } time)

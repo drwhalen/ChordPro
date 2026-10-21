@@ -231,6 +231,7 @@ public partial class MainWindow : Window
         Instrument = Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar,
         Palette = SongPalette.FromTheme(CurrentTheme),
         SimplifyChords = _settings.SimplifyChords,
+        KeyIncludesCapo = _settings.KeyIncludesCapo,
         ChordTapped = ShowChordPopup,
     };
 
@@ -361,7 +362,8 @@ public partial class MainWindow : Window
 
         // Work from the chords as heard, so every suggestion sounds the same as now.
         var sounding = _transpose + FileCapo;
-        var preferFlats = ChordTransposer.PrefersFlats(_song.Key, sounding);
+        var writtenKey = ChordTransposer.WrittenKey(_song.Key, FileCapo, _settings.KeyIncludesCapo);
+        var preferFlats = ChordTransposer.PrefersFlats(writtenKey, sounding);
         var chords = _song.ChordUsages()
             .Select(c => ChordTransposer.Transpose(_settings.SimplifyChords ? ChordSimplifier.Simplify(c) : c, sounding, preferFlats))
             .GroupBy(c => c)
@@ -373,7 +375,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var soundingKey = _song.Key is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
+        var soundingKey = writtenKey is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
         var current = _capo ?? FileCapo;
         CapoSuggestions.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 4) });
 
@@ -639,6 +641,7 @@ public partial class MainWindow : Window
         ShowChordsCheck.IsChecked = _settings.ShowChords;
         ShowDiagramsCheck.IsChecked = _settings.ShowDiagrams;
         SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
+        KeyIncludesCapoCheck.IsChecked = _settings.KeyIncludesCapo;
         GuitarRadio.IsChecked = _settings.Instrument != Instrument.Ukulele.Name;
         UkuleleRadio.IsChecked = _settings.Instrument == Instrument.Ukulele.Name;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
@@ -669,9 +672,18 @@ public partial class MainWindow : Window
         _settings.ShowDiagrams = ShowDiagramsCheck.IsChecked == true;
         _settings.SimplifyChords = SimplifyChordsCheck.IsChecked == true;
         _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name : Instrument.Guitar.Name;
+        var keyConventionChanged = _settings.KeyIncludesCapo != (KeyIncludesCapoCheck.IsChecked == true);
+        _settings.KeyIncludesCapo = KeyIncludesCapoCheck.IsChecked == true;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _settings.Save();
         RenderSong();
+        if (keyConventionChanged)
+        {
+            // The key filter lists the keys you hear, which this changes.
+            RefreshLibraryFilterChoices();
+            ApplyLibraryFilter();
+            UpdateNextSong();
+        }
     }
 
     // ---- Themes ------------------------------------------------------------------------------
@@ -1087,7 +1099,7 @@ public partial class MainWindow : Window
     private void RefreshLibraryFilterChoices()
     {
         var (key, capo) = (KeyFilter, CapoFilter);
-        _filterKeys = SongLibrary.Keys(_library);
+        _filterKeys = SongLibrary.Keys(_library, _settings.KeyIncludesCapo);
         _filterCapos = SongLibrary.Capos(_library);
 
         _updatingLibraryFilters = true;
@@ -1103,7 +1115,7 @@ public partial class MainWindow : Window
 
     private void ApplyLibraryFilter()
     {
-        var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter);
+        var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter, _settings.KeyIncludesCapo);
         _updatingLists = true;
         LibraryList.ItemsSource = Grouping == LibraryGrouping.None ? songs : GroupedLibraryItems(songs);
         _updatingLists = false;
@@ -1248,11 +1260,9 @@ public partial class MainWindow : Window
         {
             text += info.Title;
             // The key as the song's header will show it, with this song's saved transposition.
-            if (info.Key is { } key)
-            {
-                var shift = _settings.ForSong(next).Transpose + info.Capo;
-                text += $" ({ChordTransposer.Transpose(key, shift, ChordTransposer.PrefersFlats(key, shift))})";
-            }
+            var sounding = ChordTransposer.SoundingKey(info.Key, info.Capo, _settings.KeyIncludesCapo);
+            if (ChordTransposer.Shift(sounding, _settings.ForSong(next).Transpose) is { } key)
+                text += $" ({key})";
         }
         else
         {

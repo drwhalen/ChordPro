@@ -56,6 +56,22 @@ public static partial class ChordTransposer
         return FlatKeys.Contains(minor ? root + "m" : root);
     }
 
+    /// <summary>
+    /// The key of the chords as written. ChordPro's <c>{key}</c> already names it; a file whose
+    /// <c>{key}</c> includes the capo (LivePrompter's convention: the key you hear) is a capo's
+    /// worth higher, e.g. key Eb with capo 3 is written in C.
+    /// </summary>
+    public static string? WrittenKey(string? key, int capo, bool keyIncludesCapo) =>
+        keyIncludesCapo ? Shift(key, -capo) : key;
+
+    /// <summary>The key you hear with the file's capo on; see <see cref="WrittenKey"/>.</summary>
+    public static string? SoundingKey(string? key, int capo, bool keyIncludesCapo) =>
+        keyIncludesCapo ? key : Shift(key, capo);
+
+    /// <summary>Moves a key by <paramref name="semitones"/>, spelling the result as that key is usually written.</summary>
+    public static string? Shift(string? key, int semitones) =>
+        key is null ? null : Transpose(key.Trim(), semitones, PrefersFlats(key, semitones));
+
     private static string TransposeNote(string note, int semitones, bool flats)
     {
         var semitone = LetterSemitones[note[0] - 'A'];

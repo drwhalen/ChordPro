@@ -50,4 +50,18 @@ public class ChordTransposerTests
     [InlineData("unknown", 1, null)]
     public void ChoosesSpellingFromTransposedKey(string? key, int semitones, bool? expected) =>
         Assert.Equal(expected, ChordTransposer.PrefersFlats(key, semitones));
+
+    [Theory]
+    // ChordPro: {key} is the key of the chords; the capo raises what you hear.
+    [InlineData("C", 3, false, "C", "Eb")]
+    // LivePrompter: {key} is the key you hear with the capo on.
+    [InlineData("Eb", 3, true, "C", "Eb")]
+    [InlineData("G#", 1, true, "G", "G#")]
+    [InlineData("F#m", 2, true, "Em", "F#m")]
+    [InlineData("G", 0, true, "G", "G")]
+    public void WrittenAndSoundingKeysFollowTheKeyConvention(string key, int capo, bool keyIncludesCapo, string written, string sounding)
+    {
+        Assert.Equal(written, ChordTransposer.WrittenKey(key, capo, keyIncludesCapo));
+        Assert.Equal(sounding, ChordTransposer.SoundingKey(key, capo, keyIncludesCapo));
+    }
 }

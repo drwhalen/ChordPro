@@ -123,21 +123,22 @@ public static partial class SongLibrary
         artist.StartsWith("The ", StringComparison.OrdinalIgnoreCase) ? artist[4..].TrimStart() : artist;
 
     /// <summary>
-    /// Songs matching the search text, a key (null for any) and a capo fret (null for any, 0 for
-    /// songs played without a capo).
+    /// Songs matching the search text, a key you hear (null for any) and a capo fret (null for any, 0
+    /// for songs played without a capo). <paramref name="keyIncludesCapo"/>: see <see cref="ChordTransposer.WrittenKey"/>.
     /// </summary>
-    public static List<SongInfo> Filter(IEnumerable<SongInfo> songs, string? search, string? key = null, int? capo = null) =>
+    public static List<SongInfo> Filter(IEnumerable<SongInfo> songs, string? search, string? key = null, int? capo = null,
+        bool keyIncludesCapo = false) =>
         songs.Where(s => string.IsNullOrWhiteSpace(search) || s.Matches(search))
-            .Where(s => key is null || SameKey(s.Key, key))
+            .Where(s => key is null || SameKey(ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo), key))
             .Where(s => capo is null || s.Capo == capo)
             .ToList();
 
     /// <summary>
-    /// The keys in a library, in pitch order from C with each major key before its minor. Spellings
-    /// of the same key (C# and Db) are one choice.
+    /// The keys you hear in a library, in pitch order from C with each major key before its minor.
+    /// Spellings of the same key (C# and Db) are one choice.
     /// </summary>
-    public static List<KeyChoice> Keys(IEnumerable<SongInfo> songs) =>
-        songs.Select(s => s.Key?.Trim()).OfType<string>().Where(k => k.Length > 0)
+    public static List<KeyChoice> Keys(IEnumerable<SongInfo> songs, bool keyIncludesCapo = false) =>
+        songs.Select(s => ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo)?.Trim()).OfType<string>().Where(k => k.Length > 0)
             .GroupBy(k => ParseKey(k) is var (root, minor) ? $"{root}{(minor ? "m" : "")}" : k.ToLowerInvariant())
             .Select(g =>
             {

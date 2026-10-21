@@ -117,6 +117,8 @@
                                     <CheckBox x:Name="ShowDiagramsCheck" Content="Chord diagrams" IsCheckedChanged="OnViewOptionChanged" />
                                 <CheckBox x:Name="SimplifyChordsCheck" Content="Easy chords" IsCheckedChanged="OnViewOptionChanged"
                                           ToolTip.Tip="Show simpler chords: Cmaj9 → C, Am7 → Am, G/B → G, F#m7b5 → F#m" />
+                                    <CheckBox x:Name="KeyIncludesCapoCheck" Content="Song keys include the capo" IsCheckedChanged="OnViewOptionChanged"
+                                              ToolTip.Tip="Turn on when {key} is the key you hear with the capo on, as LivePrompter charts are written. Off follows ChordPro: {key} is the key of the chords as written." />
                                     <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
                                     <RadioButton x:Name="GuitarRadio" GroupName="Instrument" Content="Guitar" IsCheckedChanged="OnViewOptionChanged" />
                                     <RadioButton x:Name="UkuleleRadio" GroupName="Instrument" Content="Ukulele" IsCheckedChanged="OnViewOptionChanged" />

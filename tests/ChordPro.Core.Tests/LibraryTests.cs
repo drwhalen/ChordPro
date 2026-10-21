@@ -117,9 +117,9 @@ public sealed class LibraryTests : IDisposable
             new("/d.cho", "Four", null),
         ];
 
-        Assert.Equal(["One", "Two"], SongLibrary.Filter(songs, "", key: "g").Select(s => s.Title));
+        Assert.Equal(["One", "Two"], SongLibrary.Filter(songs, "", key: "g", keyIncludesCapo: true).Select(s => s.Title));
         Assert.Equal(["One", "Three", "Four"], SongLibrary.Filter(songs, null, capo: 0).Select(s => s.Title));
-        Assert.Equal(["Two"], SongLibrary.Filter(songs, "tw", "G", 2).Select(s => s.Title));
+        Assert.Equal(["Two"], SongLibrary.Filter(songs, "tw", "G", 2, keyIncludesCapo: true).Select(s => s.Title));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class LibraryTests : IDisposable
             new("/g", "", null, "C#"), new("/h", "", null, "E minor"), new("/i", "", null, "Dorian"),
         ];
 
-        Assert.Equal(["C", "C#/Db", "E", "Em/E minor", "G", "Dorian"], SongLibrary.Keys(songs).Select(k => k.Label));
+        Assert.Equal(["C", "C#/Db", "E", "Em/E minor", "G", "Dorian"], SongLibrary.Keys(songs, keyIncludesCapo: true).Select(k => k.Label));
         Assert.Equal([0, 3], SongLibrary.Capos(songs));
     }
 
@@ -152,6 +152,20 @@ public sealed class LibraryTests : IDisposable
         SongInfo[] songs = [new("/a", "One", null, "C#"), new("/b", "Two", null, "Db"), new("/c", "Three", null, "D")];
 
         Assert.Equal(["One", "Two"], SongLibrary.Filter(songs, null, "Db").Select(s => s.Title));
+    }
+
+    [Fact]
+    public void FiltersByTheKeyYouHear()
+    {
+        // Written in C with capo 3: you hear Eb. LivePrompter writes that as {key: Eb}.
+        SongInfo[] chordPro = [new("/a", "One", null, "C", Capo: 3)];
+        SongInfo[] livePrompter = [new("/a", "One", null, "Eb", Capo: 3)];
+
+        Assert.Single(SongLibrary.Filter(chordPro, null, "Eb"));
+        Assert.Single(SongLibrary.Filter(livePrompter, null, "Eb", keyIncludesCapo: true));
+        Assert.Empty(SongLibrary.Filter(livePrompter, null, "Eb"));
+        Assert.Equal(["Eb"], SongLibrary.Keys(chordPro).Select(k => k.Label));
+        Assert.Equal(["Eb"], SongLibrary.Keys(livePrompter, keyIncludesCapo: true).Select(k => k.Label));
     }
 
     [Fact]
