@@ -70,6 +70,33 @@ public sealed class LibraryTests : IDisposable
         Assert.Equal(expected, new SongInfo("/x/b.cho", "Zebra", "Someone").Matches(search));
 
     [Fact]
+    public void GroupsByArtistIgnoringCaseAndLeadingThe()
+    {
+        SongInfo[] songs =
+        [
+            new("/a.cho", "Across the Universe", "The Beatles"),
+            new("/b.cho", "Amazing Grace", null),
+            new("/c.cho", "Badge", "Cream"),
+            new("/d.cho", "Bike", "  "),
+            new("/e.cho", "Help", "the beatles"),
+            new("/f.cho", "Alright Now", "Free"),
+        ];
+
+        var groups = SongLibrary.GroupByArtist(songs);
+
+        Assert.Equal(["The Beatles", "Cream", "Free", ArtistGroup.UnknownArtist], groups.Select(g => g.Artist));
+        Assert.Equal(["Across the Universe", "Help"], groups[0].Songs.Select(s => s.Title));
+        Assert.Equal(["Amazing Grace", "Bike"], groups[3].Songs.Select(s => s.Title));
+    }
+
+    [Theory]
+    [InlineData("The Beatles", "Beatles")]
+    [InlineData("Theory of a Deadman", "Theory of a Deadman")]
+    [InlineData("Neil Young", "Neil Young")]
+    public void ArtistSortKeyDropsLeadingThe(string artist, string expected) =>
+        Assert.Equal(expected, SongLibrary.ArtistSortKey(artist));
+
+    [Fact]
     public void SetlistRoundTripsWithRelativePaths()
     {
         var song1 = Path.Combine(_folder, "songs", "one.cho");

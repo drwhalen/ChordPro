@@ -29,6 +29,7 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string? LibraryFolder { get; set; }
+    public bool GroupLibraryByArtist { get; set; }
     public List<string> RecentFiles { get; set; } = [];
     public string? SetlistPath { get; set; }
     public List<string> SetlistSongs { get; set; } = [];

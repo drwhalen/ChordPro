@@ -13,6 +13,13 @@ public sealed record SongInfo(string Path, string Title, string? Artist)
             System.IO.Path.GetFileName(Path).Contains(word, StringComparison.CurrentCultureIgnoreCase));
 }
 
+/// <summary>An artist and their songs, for showing the library grouped by artist.</summary>
+public sealed record ArtistGroup(string Artist, IReadOnlyList<SongInfo> Songs)
+{
+    /// <summary>Heading for songs without an <c>{artist}</c> directive.</summary>
+    public const string UnknownArtist = "Unknown artist";
+}
+
 public static partial class SongLibrary
 {
     public static readonly string[] FileExtensions = [".cho", ".chopro", ".chordpro", ".crd", ".pro"];
@@ -64,6 +71,25 @@ public static partial class SongLibrary
             .ThenBy(s => s.Artist, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }
+
+    /// <summary>
+    /// Groups songs by artist, ignoring case and a leading "The" when sorting so "The Beatles" files
+    /// under B. Songs keep their order within a group; songs with no artist come last.
+    /// </summary>
+    public static List<ArtistGroup> GroupByArtist(IEnumerable<SongInfo> songs) =>
+        songs.GroupBy(ArtistGroupName, StringComparer.CurrentCultureIgnoreCase)
+            .OrderBy(g => g.Key == ArtistGroup.UnknownArtist)
+            .ThenBy(g => ArtistSortKey(g.Key), StringComparer.CurrentCultureIgnoreCase)
+            .Select(g => new ArtistGroup(g.Key, g.ToList()))
+            .ToList();
+
+    /// <summary>The name of the <see cref="ArtistGroup"/> a song belongs to.</summary>
+    public static string ArtistGroupName(SongInfo song) =>
+        song.Artist?.Trim() is { Length: > 0 } artist ? artist : ArtistGroup.UnknownArtist;
+
+    /// <summary>The artist name used for sorting: without a leading "The ".</summary>
+    public static string ArtistSortKey(string artist) =>
+        artist.StartsWith("The ", StringComparison.OrdinalIgnoreCase) ? artist[4..].TrimStart() : artist;
 
     public static SongInfo? ReadInfo(string path)
     {

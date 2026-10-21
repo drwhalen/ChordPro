@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="using:ChordPro.Core"
+        xmlns:local="using:ChordPro.Viewer"
         x:Class="ChordPro.Viewer.MainWindow"
         Title="ChordPro Viewer"
         Icon="/Assets/AppIcon.png"
@@ -40,6 +41,13 @@
                 <TextBlock Text="{Binding Artist}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding Artist, Converter={x:Static ObjectConverters.IsNotNull}}" />
             </StackPanel>
+        </DataTemplate>
+        <DataTemplate DataType="local:ArtistHeader" x:DataType="local:ArtistHeader">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,2">
+                <TextBlock Text="{Binding Label}" FontWeight="Bold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Count}" FontSize="12" Opacity="0.6" Margin="8,0,0,0"
+                           VerticalAlignment="Center" />
+            </Grid>
         </DataTemplate>
     </Window.DataTemplates>
 
@@ -136,6 +144,7 @@
                             </WrapPanel>
                             <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="CharacterEllipsis" />
                             <TextBox x:Name="SearchBox" Watermark="Search title, artist…" TextChanged="OnSearchChanged" />
+                            <CheckBox x:Name="GroupByArtistCheck" Content="Group by artist" Click="OnGroupByArtistClick" />
                         </StackPanel>
                         <ListBox x:Name="LibraryList" SelectionChanged="OnSongListSelectionChanged" />
                     </DockPanel>

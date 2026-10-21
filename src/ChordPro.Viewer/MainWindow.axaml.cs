@@ -60,6 +60,9 @@ public partial class MainWindow : Window
     private WindowState _windowStateBeforeStage;
 
     private List<SongInfo> _library = [];
+    // Artist groups the user expanded while browsing, and ones they collapsed during the current search.
+    private readonly HashSet<string> _expandedArtists = new(StringComparer.CurrentCultureIgnoreCase);
+    private readonly HashSet<string> _collapsedSearchArtists = new(StringComparer.CurrentCultureIgnoreCase);
     private readonly Setlist _setlist = new();
     private string? _setlistPath;
     private bool _updatingLists;
@@ -136,6 +139,7 @@ public partial class MainWindow : Window
         RenderSong();
         SongScroller.Offset = Vector.Zero;
         RefreshRecentList();
+        RevealInLibrary(_path);
         SyncListSelections();
     }
 
@@ -626,6 +630,7 @@ public partial class MainWindow : Window
         SetSidebarVisible(_settings.SidebarVisible);
         SetTheme(_settings.Theme);
         LibraryFolderText.Text = _settings.LibraryFolder ?? "No folder chosen";
+        GroupByArtistCheck.IsChecked = _settings.GroupLibraryByArtist;
         if (_settings.LibraryFolder is not null)
             _ = ScanLibraryAsync();
 
@@ -941,17 +946,71 @@ public partial class MainWindow : Window
         LibraryFolderText.Text = $"{folder} · {_library.Count} songs";
         ToolTip.SetTip(LibraryFolderText, folder);
         ApplyLibraryFilter();
+        if (_path is not null)
+            RevealInLibrary(_path); // the song opened at startup may have loaded before the scan finished
     }
 
-    private void OnSearchChanged(object? sender, TextChangedEventArgs e) => ApplyLibraryFilter();
+    private void OnSearchChanged(object? sender, TextChangedEventArgs e)
+    {
+        _collapsedSearchArtists.Clear();
+        ApplyLibraryFilter();
+    }
+
+    private void OnGroupByArtistClick(object? sender, RoutedEventArgs e)
+    {
+        _settings.GroupLibraryByArtist = GroupByArtistCheck.IsChecked == true;
+        _settings.Save();
+        if (_path is not null && ArtistOf(_path) is { } artist)
+            _expandedArtists.Add(artist);
+        ApplyLibraryFilter();
+    }
+
+    private bool IsSearching => !string.IsNullOrWhiteSpace(SearchBox.Text);
 
     private void ApplyLibraryFilter()
     {
         var search = SearchBox.Text?.Trim() ?? "";
+        var songs = search.Length == 0 ? _library : _library.Where(s => s.Matches(search)).ToList();
         _updatingLists = true;
-        LibraryList.ItemsSource = search.Length == 0 ? _library : _library.Where(s => s.Matches(search)).ToList();
+        LibraryList.ItemsSource = _settings.GroupLibraryByArtist ? GroupedLibraryItems(songs) : songs;
         _updatingLists = false;
         SyncListSelections();
+    }
+
+    // Groups start collapsed so a large library reads as a list of artists; during a search they
+    // start expanded so every match is visible.
+    private List<object> GroupedLibraryItems(List<SongInfo> songs)
+    {
+        var items = new List<object>();
+        foreach (var group in SongLibrary.GroupByArtist(songs))
+        {
+            var expanded = IsArtistExpanded(group.Artist);
+            items.Add(new ArtistHeader(group.Artist, group.Songs.Count, expanded));
+            if (expanded)
+                items.AddRange(group.Songs);
+        }
+        return items;
+    }
+
+    private bool IsArtistExpanded(string artist) =>
+        IsSearching ? !_collapsedSearchArtists.Contains(artist) : _expandedArtists.Contains(artist);
+
+    private void ToggleArtist(string artist)
+    {
+        var set = IsSearching ? _collapsedSearchArtists : _expandedArtists;
+        if (!set.Remove(artist))
+            set.Add(artist);
+        ApplyLibraryFilter();
+    }
+
+    private string? ArtistOf(string path) =>
+        _library.Find(s => s.Path == path) is { } info ? SongLibrary.ArtistGroupName(info) : null;
+
+    // A song opened from Recent, a setlist or Finder expands its artist so it shows highlighted.
+    private void RevealInLibrary(string path)
+    {
+        if (_settings.GroupLibraryByArtist && !IsSearching && ArtistOf(path) is { } artist && _expandedArtists.Add(artist))
+            ApplyLibraryFilter();
     }
 
     private void RefreshRecentList()
@@ -963,6 +1022,12 @@ public partial class MainWindow : Window
 
     private void OnSongListSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (!_updatingLists && sender is ListBox { SelectedItem: ArtistHeader header })
+        {
+            // Rebuilding the list inside its own selection event confuses the ListBox, so defer it.
+            Dispatcher.UIThread.Post(() => ToggleArtist(header.Artist));
+            return;
+        }
         if (_updatingLists || sender is not ListBox { SelectedItem: SongInfo info } || info.Path == _path)
             return;
         LoadFile(info.Path);
@@ -974,8 +1039,8 @@ public partial class MainWindow : Window
         _updatingLists = true;
         foreach (var list in new[] { LibraryList, RecentList, SetlistList })
         {
-            var items = list.ItemsSource as IList<SongInfo>;
-            var index = items?.ToList().FindIndex(s => s.Path == _path) ?? -1;
+            var items = list.ItemsSource as IEnumerable<object>;
+            var index = items?.ToList().FindIndex(item => item is SongInfo s && s.Path == _path) ?? -1;
             list.SelectedIndex = index;
             if (index >= 0)
                 list.ScrollIntoView(index);
