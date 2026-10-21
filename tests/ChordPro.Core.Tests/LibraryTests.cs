@@ -30,12 +30,35 @@ public sealed class LibraryTests : IDisposable
         File.WriteAllText(Path.Combine(_folder, "b.cho"), "{title: Zebra}\n{artist: Someone}");
         File.WriteAllText(Path.Combine(_folder, "sub", "a.chordpro"), "{t: Apple}");
         File.WriteAllText(Path.Combine(_folder, "untitled.pro"), "[C]la");
-        File.WriteAllText(Path.Combine(_folder, "notes.txt"), "{title: Not a song}");
+        File.WriteAllText(Path.Combine(_folder, "notes.txt"), "Bring a spare capo.\nTune down [maybe] for the encore.");
 
         var songs = SongLibrary.Scan(_folder);
 
         Assert.Equal(["Apple", "untitled", "Zebra"], songs.Select(s => s.Title));
         Assert.Equal("Someone", songs[2].Artist);
+    }
+
+    [Theory]
+    [InlineData("{title: Text Song}\nla la", true)]
+    [InlineData("  {soc}\n[G]la", true)]
+    [InlineData("Some words [C]here and [F#m7]there", true)]
+    [InlineData("Just a note\nwith {braces} mid-line and [brackets]", false)]
+    [InlineData("", false)]
+    public void IncludesTextFilesOnlyWhenTheyLookLikeChordPro(string text, bool expected)
+    {
+        var path = Path.Combine(_folder, "song.txt");
+        File.WriteAllText(path, text);
+
+        Assert.Equal(expected, SongLibrary.IsLibrarySong(path));
+    }
+
+    [Fact]
+    public void ScanListsChordProTextFiles()
+    {
+        File.WriteAllText(Path.Combine(_folder, "song.TXT"), "{title: Text Song}\n[C]la");
+        File.WriteAllText(Path.Combine(_folder, "readme.txt"), "Songs for Friday.");
+
+        Assert.Equal(["Text Song"], SongLibrary.Scan(_folder).Select(s => s.Title));
     }
 
     [Theory]

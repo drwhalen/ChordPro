@@ -32,7 +32,7 @@ Gatekeeper warnings, sign it with an Apple Developer ID certificate (hardened ru
 
 | Toolbar / sidebar | What it does |
 | --- | --- |
-| **Songs** sidebar → Library | Choose a folder; every `.cho/.chopro/.chordpro/.crd/.pro` file in it (and subfolders) is listed by title and artist, with search. |
+| **Songs** sidebar → Library | Choose a folder; every `.cho/.chopro/.chordpro/.crd/.pro` file in it (and subfolders), plus `.txt` files that contain ChordPro, is listed by title and artist, with search. |
 | Sidebar → Recent | The last 20 songs you opened. |
 | Sidebar → Setlist | Build an ordered list of songs: add, remove, reorder, save/open `.setlist` files, and step through with **◀ Previous / Next ▶** or the ← → keys (most page-turner pedals send arrow keys). |
 | **A− / A+** | Text size. |

@@ -20,7 +20,7 @@ public partial class MainWindow : Window
 {
     private static readonly FilePickerFileType ChordProFiles = new("ChordPro songs")
     {
-        Patterns = [.. SongLibrary.FileExtensions.Select(e => "*" + e), "*.txt"],
+        Patterns = [.. SongLibrary.FileExtensions.Select(e => "*" + e), "*" + SongLibrary.TextExtension],
     };
 
     private static readonly FilePickerFileType SetlistFiles = new("Setlists") { Patterns = ["*" + Setlist.FileExtension] };
