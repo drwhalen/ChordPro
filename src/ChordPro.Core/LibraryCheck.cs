@@ -12,7 +12,8 @@ public sealed record LibraryIssue(string Path, string Name, string Problem);
 /// with nothing under them, a key that disagrees with the file name, a title and artist swapped
 /// relative to the file name, bracketed text that isn't a
 /// chord, fingerings whose name doesn't match the chord as written, and setlist lines that match
-/// no song. For a LivePrompter library it also finds lines LivePrompter would cut off.
+/// no song, and artist names spelled two ways. For a LivePrompter library it also finds lines
+/// LivePrompter would cut off.
 /// </summary>
 public static partial class LibraryCheck
 {
@@ -48,6 +49,9 @@ public static partial class LibraryCheck
             }
         }
 
+        foreach (var (song, problem) in CheckArtistSpellings(library))
+            issues.Add(new LibraryIssue(song.Path, song.Title, problem));
+
         var paths = library.Select(s => s.Path).ToList();
         foreach (var path in setlists)
         {
@@ -63,6 +67,60 @@ public static partial class LibraryCheck
             }
         }
         return issues;
+    }
+
+    /// <summary>
+    /// Songs whose artist is another artist in the library written differently: the same name with or
+    /// without "The" or punctuation ("Eagles", "The Eagles"), which the library lists as two artists,
+    /// or a near miss a letter or two apart ("Ozzy Osborne", "Ozzy Osbourne"). The spelling used by
+    /// fewer songs is the one reported, though it isn't always the wrong one.
+    /// </summary>
+    public static IEnumerable<(SongInfo Song, string Problem)> CheckArtistSpellings(IEnumerable<SongInfo> songs)
+    {
+        var byArtist = songs.Where(s => !string.IsNullOrWhiteSpace(s.Artist))
+            .GroupBy(s => s.Artist!.Trim(), StringComparer.CurrentCultureIgnoreCase)
+            .Select(g => (Name: g.Key, Key: Letters(g.Key), Songs: g.ToList()))
+            .ToList();
+        for (var i = 0; i < byArtist.Count; i++)
+        {
+            for (var j = i + 1; j < byArtist.Count; j++)
+            {
+                var (a, b) = (byArtist[i], byArtist[j]);
+                var sameName = a.Key == b.Key;
+                if (!sameName && !NearMiss(a.Key, b.Key))
+                    continue;
+                var (typo, right) = a.Songs.Count < b.Songs.Count || (a.Songs.Count == b.Songs.Count && string.CompareOrdinal(a.Name, b.Name) > 0) ? (a, b) : (b, a);
+                var count = $"{right.Songs.Count} {(right.Songs.Count == 1 ? "song" : "songs")}";
+                foreach (var song in typo.Songs)
+                    yield return (song, sameName
+                        ? $"Artist “{typo.Name}” is also written “{right.Name}” ({count}), so they're listed as two artists"
+                        : $"Artist “{typo.Name}” is spelled differently from “{right.Name}” ({count}); check which is right");
+            }
+        }
+
+        static string Letters(string artist) =>
+            new([.. SongLibrary.ArtistSortKey(artist).ToLowerInvariant().Where(char.IsLetterOrDigit)]);
+    }
+
+    // One letter added, removed or changed, or two in a long name. Short names are close to
+    // everything ("Eagles" is two letters from "Beatles", "Cream" one from "Dream"), so they only
+    // count at one letter apart, and very short ones not at all.
+    private static bool NearMiss(string a, string b)
+    {
+        var shorter = Math.Min(a.Length, b.Length);
+        var allowed = shorter >= 10 ? 2 : shorter >= 6 ? 1 : 0;
+        if (allowed == 0 || Math.Abs(a.Length - b.Length) > allowed)
+            return false;
+        var previous = Enumerable.Range(0, b.Length + 1).ToArray();
+        for (var i = 1; i <= a.Length; i++)
+        {
+            var current = new int[b.Length + 1];
+            current[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            previous = current;
+        }
+        return previous[b.Length] <= allowed;
     }
 
     /// <summary>Lines of a chart that LivePrompter would cut off, with where the cut falls.</summary>

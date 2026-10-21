@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ChordPro.Core;
 using ChordPro.Core.Chords;
 using ChordPro.Core.Layout;
@@ -1164,13 +1165,14 @@ public partial class MainWindow : Window
     // Searching or filtering by key or capo narrows the list, so every group starts expanded.
     private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null;
 
-    private void ApplyLibraryFilter()
+    /// <param name="scrollToSong">Scroll the library to the open song (not while a group is being opened).</param>
+    private void ApplyLibraryFilter(bool scrollToSong = true)
     {
         var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter, _settings.KeyIncludesCapo);
         _updatingLists = true;
         LibraryList.ItemsSource = Grouping == LibraryGrouping.None ? songs : GroupedLibraryItems(songs);
         _updatingLists = false;
-        SyncListSelections();
+        SyncListSelections(scrollToSong);
     }
 
     // Groups start collapsed so a large library reads as a list of artists or books.
@@ -1195,7 +1197,29 @@ public partial class MainWindow : Window
         var set = IsLibraryNarrowed ? _collapsedFilteredGroups : _expandedGroups;
         if (!set.Remove(name))
             set.Add(name);
-        ApplyLibraryFilter();
+        ApplyLibraryFilter(scrollToSong: false);
+        ScrollHeadingToTop(name);
+    }
+
+    // Put a group's heading at the top of the list so its songs show beneath it, instead of
+    // opening below the visible part of a long list.
+    private void ScrollHeadingToTop(string name)
+    {
+        if (LibraryList.ItemsSource is not IEnumerable<object> items)
+            return;
+        var index = items.ToList().FindIndex(item => item is GroupHeader header && header.Name == name);
+        if (index < 0)
+            return;
+        LibraryList.ScrollIntoView(index); // the list only builds rows near the view
+        // Measure where the row landed once the list has laid it out.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (LibraryList.ContainerFromIndex(index) is not { } row ||
+                LibraryList.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is not { } scroller ||
+                row.TranslatePoint(default, scroller) is not { } position)
+                return;
+            scroller.Offset = new Vector(scroller.Offset.X, Math.Max(0, scroller.Offset.Y + position.Y));
+        }, DispatcherPriority.Background);
     }
 
     // A song opened from Recent, a setlist or Finder expands its group so it shows highlighted
@@ -1230,7 +1254,7 @@ public partial class MainWindow : Window
     }
 
     // Highlight the open song in whichever lists contain it.
-    private void SyncListSelections()
+    private void SyncListSelections(bool scrollLibrary = true)
     {
         _updatingLists = true;
         foreach (var list in new[] { LibraryList, RecentList, SetlistList })
@@ -1238,7 +1262,7 @@ public partial class MainWindow : Window
             var items = list.ItemsSource as IEnumerable<object>;
             var index = items?.ToList().FindIndex(item => item is SongInfo s && s.Path == _path) ?? -1;
             list.SelectedIndex = index;
-            if (index >= 0)
+            if (index >= 0 && (scrollLibrary || list != LibraryList))
                 list.ScrollIntoView(index);
         }
         _updatingLists = false;

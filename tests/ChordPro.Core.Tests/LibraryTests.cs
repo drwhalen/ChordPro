@@ -207,6 +207,28 @@ public sealed class LibraryTests : IDisposable
     }
 
     [Fact]
+    public void ChecksForArtistsWrittenTwoWays()
+    {
+        SongInfo[] songs =
+        [
+            new("/a", "Paranoid", "Ozzy Osbourne"), new("/b", "Crazy Train", "Ozzy Osbourne"),
+            new("/c", "Mama, I'm Coming Home", "Ozzy Osborne"),
+            new("/d", "Lyin' Eyes", "Eagles"), new("/e", "Take It Easy", "The Eagles"), new("/f", "Desperado", "Eagles"),
+            new("/g", "Let It Be", "The Beatles"),  // "Eagles" is two letters from "Beatles": too short to count
+            new("/h", "Badge", "Cream"), new("/i", "Dream On", "Dream"),
+        ];
+
+        var found = LibraryCheck.CheckArtistSpellings(songs).Select(f => (f.Song.Title, f.Problem)).ToList();
+
+        Assert.Equal(
+            [
+                ("Mama, I'm Coming Home", "Artist “Ozzy Osborne” is spelled differently from “Ozzy Osbourne” (2 songs); check which is right"),
+                ("Take It Easy", "Artist “The Eagles” is also written “Eagles” (2 songs), so they're listed as two artists"),
+            ],
+            found.OrderBy(f => f.Title));
+    }
+
+    [Fact]
     public void ChecksSetlistsForSongsThatAreMissing()
     {
         var setlists = Directory.CreateDirectory(Path.Combine(_folder, "Setlists")).FullName;

@@ -168,7 +168,8 @@
                                           ToolTip.Tip="Show only songs played with this capo" />
                             </Grid>
                         </StackPanel>
-                        <ListBox x:Name="LibraryList" SelectionChanged="OnSongListSelectionChanged" />
+                        <!-- SyncListSelections scrolls to the open song itself, except while a group is opened. -->
+                        <ListBox x:Name="LibraryList" AutoScrollToSelectedItem="False" SelectionChanged="OnSongListSelectionChanged" />
                     </DockPanel>
                 </TabItem>
 
