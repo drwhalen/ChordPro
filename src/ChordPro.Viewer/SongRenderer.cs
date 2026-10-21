@@ -5,18 +5,23 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using ChordPro.Core;
 using ChordPro.Core.Chords;
+using ChordPro.Core.Themes;
 
 namespace ChordPro.Viewer;
 
-/// <summary>Fixed colours, for rendering outside the themed window (e.g. PDF export).</summary>
-public sealed record SongPalette(IBrush Text, IBrush Chord, IBrush ChorusBar, IBrush CommentBackground, IBrush CommentBox)
+/// <summary>The brushes a song is drawn with, made from a <see cref="SongTheme"/>.</summary>
+public sealed record SongPalette(IBrush Background, IBrush Text, IBrush MutedText, IBrush Chord,
+    IBrush ChorusBar, IBrush CommentBackground, IBrush CommentBox)
 {
-    public static SongPalette Print { get; } = new(
-        Brushes.Black,
-        new SolidColorBrush(Color.Parse("#C2410C")),
-        new SolidColorBrush(Color.Parse("#D4D4D8")),
-        new SolidColorBrush(Color.Parse("#EDEDF0")),
-        new SolidColorBrush(Color.Parse("#A1A1AA")));
+    /// <summary>Printing always uses the Day colours: dark text on white paper.</summary>
+    public static SongPalette Print { get; } = FromTheme(SongTheme.Day);
+
+    public static SongPalette FromTheme(SongTheme theme)
+    {
+        static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex)).ToImmutable();
+        return new SongPalette(Brush(theme.Background), Brush(theme.Text), Brush(theme.MutedText), Brush(theme.Chord),
+            Brush(theme.ChorusBar), Brush(theme.CommentBackground), Brush(theme.CommentBox));
+    }
 }
 
 public sealed record RenderOptions
@@ -30,8 +35,7 @@ public sealed record RenderOptions
     public bool ShowDiagrams { get; init; }
     public Instrument Instrument { get; init; } = Instrument.Guitar;
     public int Columns { get; init; } = 1;
-    /// <summary>Explicit colours; null uses the current theme.</summary>
-    public SongPalette? Palette { get; init; }
+    public SongPalette Palette { get; init; } = SongPalette.FromTheme(SongTheme.Day);
 }
 
 /// <summary>Builds a read-only visual tree for a <see cref="Song"/>.</summary>
@@ -44,6 +48,7 @@ public sealed partial class SongRenderer(RenderOptions options)
     private static partial Regex WordRegex();
 
     private double FontSize => options.FontSize;
+    private SongPalette Palette => options.Palette;
 
     private int _shift;
     private bool? _preferFlats;
@@ -53,6 +58,9 @@ public sealed partial class SongRenderer(RenderOptions options)
     /// display order. Used to choose page breaks when printing.
     /// </summary>
     public List<Control> Blocks { get; } = [];
+
+    /// <summary>The control showing each line, keyed by section and line index (hidden lines are absent).</summary>
+    public Dictionary<(Section, int), Control> LineControls { get; } = [];
 
     /// <summary>The written capo from the file (0 if none).</summary>
     public static int FileCapo(Song song) => int.TryParse(song.Capo, out var capo) ? Math.Clamp(capo, 0, 11) : 0;
@@ -64,6 +72,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
         _preferFlats = ChordTransposer.PrefersFlats(song.Key, _shift);
         Blocks.Clear();
+        LineControls.Clear();
 
         var root = new StackPanel { Spacing = FontSize };
         root.Children.Add(Block(RenderHeader(song, fileCapo)));
@@ -92,9 +101,9 @@ public sealed partial class SongRenderer(RenderOptions options)
         if (song.Title is { } title)
             header.Children.Add(Text(title, FontSize * 1.75, FontWeight.Bold, wrap: true));
         if (song.Subtitle is { } subtitle)
-            header.Children.Add(Text(subtitle, FontSize * 1.1, opacity: 0.8, wrap: true));
+            header.Children.Add(Text(subtitle, FontSize * 1.1, muted: true, wrap: true));
         if (song.Artist is { } artist)
-            header.Children.Add(Text(artist, FontSize, opacity: 0.8, wrap: true));
+            header.Children.Add(Text(artist, FontSize, muted: true, wrap: true));
 
         var capo = options.Capo ?? fileCapo;
         var details = new List<string>();
@@ -110,7 +119,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         if (song.Time is { } time)
             details.Add($"Time: {time}");
         if (details.Count > 0)
-            header.Children.Add(Text(string.Join("   ·   ", details), FontSize * 0.9, opacity: 0.6, wrap: true));
+            header.Children.Add(Text(string.Join("   ·   ", details), FontSize * 0.9, muted: true, wrap: true));
 
         return header;
     }
@@ -139,10 +148,12 @@ public sealed partial class SongRenderer(RenderOptions options)
             if (shape is null)
                 continue;
 
-            var diagram = new ChordDiagram(name, shape, FontSize) { Margin = new Thickness(0, 0, FontSize * 0.5, FontSize * 0.5) };
-            Paint(diagram, ChordDiagram.ForegroundProperty, "TextBrush", options.Palette?.Text);
-            Paint(diagram, ChordDiagram.AccentProperty, "ChordBrush", options.Palette?.Chord);
-            panel.Children.Add(diagram);
+            panel.Children.Add(new ChordDiagram(name, shape, FontSize)
+            {
+                Margin = new Thickness(0, 0, FontSize * 0.5, FontSize * 0.5),
+                Foreground = Palette.Text,
+                Accent = Palette.Chord,
+            });
         }
 
         return panel.Children.Count == 0 ? null : Block(panel);
@@ -184,12 +195,13 @@ public sealed partial class SongRenderer(RenderOptions options)
         var label = section.Label ?? (section.Kind == SectionKind.Chorus ? "Chorus" : null);
         Control? labelBlock = label is null
             ? null
-            : Text(label, FontSize * 0.85, FontWeight.SemiBold, opacity: 0.6, margin: new Thickness(0, 0, 0, 4));
+            : Text(label, FontSize * 0.85, FontWeight.SemiBold, muted: true, margin: new Thickness(0, 0, 0, 4));
 
-        var lines = section.Lines
-            .Where(l => options.ShowChords || l is not LyricLine { HasChords: true } line || !IsChordsOnly(line))
-            .Select(l => RenderLine(l, mono))
+        var shown = section.Lines
+            .Select((line, index) => (Line: line, Index: index))
+            .Where(l => options.ShowChords || l.Line is not LyricLine { HasChords: true } line || !IsChordsOnly(line))
             .ToList();
+        var lines = shown.Select(l => RenderLine(l.Line, mono)).ToList();
 
         // Keep a section label on the same page as the line after it.
         if (labelBlock is not null && lines.Count > 0)
@@ -201,6 +213,8 @@ public sealed partial class SongRenderer(RenderOptions options)
         {
             lines.Insert(0, labelBlock);
         }
+        for (var i = 0; i < shown.Count; i++)
+            LineControls[(section, shown[i].Index)] = lines[i];
 
         foreach (var line in lines)
             body.Children.Add(Block(line));
@@ -213,8 +227,8 @@ public sealed partial class SongRenderer(RenderOptions options)
             Child = body,
             BorderThickness = new Thickness(3, 0, 0, 0),
             Padding = new Thickness(FontSize * 0.75, 0, 0, 0),
+            BorderBrush = Palette.ChorusBar,
         };
-        Paint(chorus, Border.BorderBrushProperty, "ChorusBarBrush", options.Palette?.ChorusBar);
         return chorus;
     }
 
@@ -276,7 +290,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         if (chord is not null)
         {
             text.Margin = new Thickness(0, 0, FontSize * 0.4, 0);
-            Paint(text, TextBlock.ForegroundProperty, "ChordBrush", options.Palette?.Chord);
+            text.Foreground = Palette.Chord;
         }
         return text;
     }
@@ -301,11 +315,11 @@ public sealed partial class SongRenderer(RenderOptions options)
         if (comment.Style == CommentStyle.Box)
         {
             border.BorderThickness = new Thickness(1);
-            Paint(border, Border.BorderBrushProperty, "CommentBoxBrush", options.Palette?.CommentBox);
+            border.BorderBrush = Palette.CommentBox;
         }
         else if (comment.Style == CommentStyle.Normal)
         {
-            Paint(border, Border.BackgroundProperty, "CommentBackgroundBrush", options.Palette?.CommentBackground);
+            border.Background = Palette.CommentBackground;
         }
         return border;
     }
@@ -316,7 +330,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         return control;
     }
 
-    private TextBlock Text(string text, double size, FontWeight? weight = null, double opacity = 1,
+    private TextBlock Text(string text, double size, FontWeight? weight = null, bool muted = false,
         Thickness? margin = null, bool wrap = false, FontFamily? font = null)
     {
         var block = new TextBlock
@@ -324,24 +338,12 @@ public sealed partial class SongRenderer(RenderOptions options)
             Text = text,
             FontSize = size,
             FontWeight = weight ?? FontWeight.Normal,
-            Opacity = opacity,
+            Foreground = muted ? Palette.MutedText : Palette.Text,
             Margin = margin ?? default,
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
         };
         if (font is not null)
             block.FontFamily = font;
-        if (options.Palette is { } palette)
-            block.Foreground = palette.Text;
         return block;
-    }
-
-    // Use the fixed palette colour if there is one; otherwise bind to the theme resource so colours
-    // follow light/dark mode changes.
-    private static void Paint(Control control, AvaloniaProperty property, string resourceKey, IBrush? fixedBrush)
-    {
-        if (fixedBrush is not null)
-            control.SetValue(property, fixedBrush);
-        else
-            control.Bind(property, control.GetResourceObservable(resourceKey));
     }
 }

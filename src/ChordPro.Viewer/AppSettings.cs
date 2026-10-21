@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ChordPro.Core.Themes;
 
 namespace ChordPro.Viewer;
 
@@ -8,7 +9,12 @@ public sealed class SongSettings
     public int Transpose { get; set; }
     public int? Capo { get; set; }
     public double? FontSize { get; set; }
+    /// <summary>Speed multiplier for timed scrolling.</summary>
     public double? ScrollSpeed { get; set; }
+    /// <summary>Manual, Timed, Musical or FollowAudio; null means Timed.</summary>
+    public string? ScrollMode { get; set; }
+    /// <summary>Tempo override for musical scrolling, in BPM.</summary>
+    public double? Tempo { get; set; }
 }
 
 /// <summary>Settings saved as JSON in the user's application-data folder.</summary>
@@ -30,6 +36,8 @@ public sealed class AppSettings
     public bool ShowDiagrams { get; set; }
     public string Instrument { get; set; } = "Guitar";
     public bool SidebarVisible { get; set; } = true;
+    public string Theme { get; set; } = SongTheme.SystemThemeName;
+    public List<SongTheme> CustomThemes { get; set; } = [];
     public Dictionary<string, SongSettings> Songs { get; set; } = [];
 
     public SongSettings ForSong(string path)

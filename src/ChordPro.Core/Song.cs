@@ -46,14 +46,23 @@ public enum SectionKind
     Other,
 }
 
-public sealed class Section(SectionKind kind, string? label = null)
+public sealed class Section(SectionKind kind, string? label = null, double? bars = null)
 {
     public SectionKind Kind { get; } = kind;
     public string? Label { get; } = label;
+    /// <summary>Length in bars, from <c>bars="16"</c> on the section directive.</summary>
+    public double? Bars { get; } = bars;
     public List<SongLine> Lines { get; } = [];
 }
 
-public abstract record SongLine;
+public abstract record SongLine
+{
+    /// <summary>Length in bars, from a <c>{x_bars: 4}</c> directive before the line.</summary>
+    public double? Bars { get; init; }
+
+    /// <summary>When the line should be reached, from a <c>{x_time: 1:05}</c> directive before the line.</summary>
+    public TimeSpan? Time { get; init; }
+}
 
 /// <summary>A lyric line with chords positioned inline, e.g. <c>[G]Amazing [C]grace</c>.</summary>
 public sealed record LyricLine(IReadOnlyList<ChordSegment> Segments) : SongLine

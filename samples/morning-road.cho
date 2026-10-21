@@ -1,16 +1,20 @@
-# An original sample song showing capo, chord definitions and duration.
+# An original sample song showing capo, chord definitions, and musical scrolling:
+# {tempo} and {time} set the pace, bars="…" gives a section's length, and {x_bars: N}
+# gives the next line's length. Lines without either get one bar per chord.
 {title: Morning Road}
 {artist: Sample Band}
 {key: D}
 {capo: 2}
 {tempo: 100}
+{time: 4/4}
 {duration: 3:10}
 {define: Dsus4 base-fret 1 frets x x 0 2 3 3}
 
 {c: Intro}
+{x_bars: 4}
 [D] [Dsus4] [D] [A]
 
-{start_of_verse: Verse 1}
+{start_of_verse: label="Verse 1" bars="16"}
 [D]Sun comes up on the [G]old dirt road
 [Bm]Coffee's warm and the [A]wind is slow
 [D]Every mile is a [G]song I know
@@ -23,7 +27,7 @@
 [G]Light is [D]soft and [A]low
 {end_of_chorus}
 
-{start_of_verse: Verse 2}
+{start_of_verse: label="Verse 2" bars="16"}
 [D]Fields of gold where the [G]rivers bend
 [Bm]Every stranger [A]feels like a friend
 [D]Every ending's a [G]start again
@@ -31,6 +35,10 @@
 {end_of_verse}
 
 {chorus}
+
+{c: Solo}
+{x_bars: 8}
+[G] [D] [A] [Bm] [G] [D] [A] [A]
 
 {start_of_bridge}
 [Bm]Slow it [A]down, [G]let it [D]ring

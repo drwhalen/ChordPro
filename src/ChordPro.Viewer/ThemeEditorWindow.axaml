@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ChordPro.Viewer.ThemeEditorWindow"
+        Title="Edit theme"
+        Width="980" Height="680" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+    <Grid ColumnDefinitions="420,*">
+        <DockPanel Grid.Column="0" Margin="20">
+            <StackPanel DockPanel.Dock="Top" Spacing="8">
+                <TextBlock Text="Name" Opacity="0.7" />
+                <TextBox x:Name="NameBox" TextChanged="OnNameChanged" />
+                <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,8">
+                    <TextBlock Text="Window style" Opacity="0.7" VerticalAlignment="Center" />
+                    <RadioButton x:Name="LightRadio" GroupName="Style" Content="Light" IsCheckedChanged="OnStyleChanged" />
+                    <RadioButton x:Name="DarkRadio" GroupName="Style" Content="Dark" IsCheckedChanged="OnStyleChanged" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Spacing="10">
+                <TextBlock x:Name="ErrorText" Foreground="#D12E2E" TextWrapping="Wrap" IsVisible="False" />
+                <Grid ColumnDefinitions="Auto,*,Auto,8,Auto">
+                    <Button x:Name="DeleteButton" Grid.Column="0" Content="Delete theme" Click="OnDeleteClick" />
+                    <Button Grid.Column="2" Content="Cancel" Click="OnCancelClick" IsCancel="True" />
+                    <Button x:Name="SaveButton" Grid.Column="4" Content="Save" Click="OnSaveClick" IsDefault="True" Classes="accent" />
+                </Grid>
+            </StackPanel>
+
+            <ScrollViewer>
+                <StackPanel x:Name="ColorRows" Spacing="6" />
+            </ScrollViewer>
+        </DockPanel>
+
+        <Border x:Name="PreviewBorder" Grid.Column="1" BorderThickness="1,0,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <ContentControl x:Name="PreviewHost" Padding="28,20" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

@@ -19,6 +19,14 @@
             <Setter Property="MinWidth" Value="40" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
+        <!-- Themes that recolour the controls: mark the selected list item with a bar, since an
+             accent-coloured fill would hide its text. -->
+        <Style Selector="Window.recolored ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+            <Setter Property="BorderThickness" Value="4,0,0,0" />
+        </Style>
         <Style Selector="WrapPanel.buttons > Button">
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
@@ -63,10 +71,19 @@
                     <Button Content="+" Click="OnCapoUpClick" ToolTip.Tip="Capo one fret higher (chords change, pitch stays)" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Auto-scroll (Space)" />
-                    <Button Content="−" Click="OnScrollSlowerClick" ToolTip.Tip="Scroll slower" />
+                    <ComboBox x:Name="ScrollModeBox" MinWidth="120" SelectionChanged="OnScrollModeChanged"
+                              ToolTip.Tip="How this song scrolls (remembered per song)">
+                        <ComboBoxItem Content="Manual" ToolTip.Tip="Tap, swipe, keys or foot pedal" />
+                        <ComboBoxItem Content="Timed" ToolTip.Tip="Paced by {duration} or {x_time} markers" />
+                        <ComboBoxItem Content="Musical" ToolTip.Tip="Paced by tempo and bars, line by line" />
+                        <ComboBoxItem Content="Follow audio (beta)" ToolTip.Tip="Listens to you play and follows your tempo (experimental)" />
+                    </ComboBox>
+                    <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Start or stop (Space)" />
+                    <Button x:Name="SlowerButton" Content="−" Click="OnScrollSlowerClick" />
                     <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="34" TextAlignment="Center" />
-                    <Button Content="+" Click="OnScrollFasterClick" ToolTip.Tip="Scroll faster" />
+                    <Button x:Name="FasterButton" Content="+" Click="OnScrollFasterClick" />
+                    <Button x:Name="PageUpButton" Content="▲" Click="OnPageUpClick" ToolTip.Tip="Page up (Page Up, Shift+Space, or tap the top of the song)" />
+                    <Button x:Name="PageDownButton" Content="▼" Click="OnPageDownClick" ToolTip.Tip="Page down (Page Down, Space, or tap the bottom of the song)" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Content="View ▾">
@@ -79,6 +96,13 @@
                                     <RadioButton x:Name="GuitarRadio" GroupName="Instrument" Content="Guitar" IsCheckedChanged="OnViewOptionChanged" />
                                     <RadioButton x:Name="UkuleleRadio" GroupName="Instrument" Content="Ukulele" IsCheckedChanged="OnViewOptionChanged" />
                                 </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button x:Name="ThemeButton" Content="Theme ▾" ToolTip.Tip="Day, night, high-contrast and your own themes">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnThemeFlyoutOpening">
+                                <StackPanel x:Name="ThemeMenu" Spacing="4" MinWidth="240" />
                             </Flyout>
                         </Button.Flyout>
                     </Button>
@@ -138,10 +162,15 @@
             </TabControl>
         </Border>
 
-        <ScrollViewer x:Name="SongScroller"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
-            <ContentControl x:Name="SongHost" Padding="32,24" />
-        </ScrollViewer>
+        <Panel>
+            <ScrollViewer x:Name="SongScroller"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ContentControl x:Name="SongHost" Padding="32,24" />
+            </ScrollViewer>
+            <!-- Marks where the line being played is kept while scrolling follows the song. -->
+            <Border x:Name="ReadingMarker" IsVisible="False" IsHitTestVisible="False"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Width="6" CornerRadius="3" Margin="12,0,0,0" />
+        </Panel>
     </DockPanel>
 </Window>

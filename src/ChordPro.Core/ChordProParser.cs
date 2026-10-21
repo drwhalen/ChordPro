@@ -17,8 +17,9 @@ public static partial class ChordProParser
     [GeneratedRegex(@"\[(?<chord>[^\]]*)\]")]
     private static partial Regex ChordRegex();
 
-    [GeneratedRegex(@"^label\s*=\s*""(?<label>[^""]*)""")]
-    private static partial Regex LabelAttributeRegex();
+    // name="value" or name=value
+    [GeneratedRegex(@"(?<name>[A-Za-z_][\w-]*)\s*=\s*(?:""(?<value>[^""]*)""|(?<value>\S+))")]
+    private static partial Regex AttributeRegex();
 
     private static readonly Dictionary<string, string> MetaAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -47,6 +48,20 @@ public static partial class ChordProParser
         Section current = new(SectionKind.None);
         Section? lastChorus = null;
         var inSection = false;
+        double? pendingBars = null;
+        TimeSpan? pendingTime = null;
+
+        // Timing directives apply to the next line that isn't blank.
+        void AddLine(SongLine songLine)
+        {
+            if (songLine is not BlankLine && (pendingBars is not null || pendingTime is not null))
+            {
+                songLine = songLine with { Bars = pendingBars, Time = pendingTime };
+                pendingBars = null;
+                pendingTime = null;
+            }
+            current.Lines.Add(songLine);
+        }
 
         void StartSection(Section section)
         {
@@ -75,11 +90,11 @@ public static partial class ChordProParser
             if (!directive.Success)
             {
                 if (line.Length == 0)
-                    current.Lines.Add(new BlankLine());
+                    AddLine(new BlankLine());
                 else if (preformatted)
-                    current.Lines.Add(new PreformattedLine(line));
+                    AddLine(new PreformattedLine(line));
                 else
-                    current.Lines.Add(ParseLyricLine(line));
+                    AddLine(ParseLyricLine(line));
                 continue;
             }
 
@@ -92,7 +107,8 @@ public static partial class ChordProParser
                 {
                     if (inSection)
                         EndSection();
-                    StartSection(new Section(kind, ParseLabel(value)));
+                    var (label, bars) = ParseSectionValue(value);
+                    StartSection(new Section(kind, label, bars));
                     inSection = true;
                 }
                 else if (inSection)
@@ -111,13 +127,13 @@ public static partial class ChordProParser
                     break;
 
                 case "c" or "comment" or "highlight":
-                    current.Lines.Add(new CommentLine(value, CommentStyle.Normal));
+                    AddLine(new CommentLine(value, CommentStyle.Normal));
                     break;
                 case "ci" or "comment_italic":
-                    current.Lines.Add(new CommentLine(value, CommentStyle.Italic));
+                    AddLine(new CommentLine(value, CommentStyle.Italic));
                     break;
                 case "cb" or "comment_box":
-                    current.Lines.Add(new CommentLine(value, CommentStyle.Box));
+                    AddLine(new CommentLine(value, CommentStyle.Box));
                     break;
 
                 case "chorus":
@@ -126,13 +142,21 @@ public static partial class ChordProParser
                         break;
                     if (lastChorus is null)
                     {
-                        current.Lines.Add(new CommentLine(value.Length > 0 ? value : "Chorus", CommentStyle.Normal));
+                        AddLine(new CommentLine(value.Length > 0 ? value : "Chorus", CommentStyle.Normal));
                         break;
                     }
                     var recalled = new Section(SectionKind.Chorus, value.Length > 0 ? value : lastChorus.Label);
                     recalled.Lines.AddRange(lastChorus.Lines);
                     StartSection(recalled);
                     StartSection(new Section(SectionKind.None));
+                    break;
+
+                case "x_bars":
+                    if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lineBars) && lineBars >= 0)
+                        pendingBars = lineBars;
+                    break;
+                case "x_time":
+                    pendingTime = SongTime.Parse(value);
                     break;
 
                 case "define" or "chord":
@@ -245,12 +269,22 @@ public static partial class ChordProParser
         return false;
     }
 
-    private static string? ParseLabel(string value)
+    // A section directive's value is either a plain label ("Verse 1") or attributes
+    // (label="Verse 1" bars="16").
+    private static (string? Label, double? Bars) ParseSectionValue(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            return null;
-        var attr = LabelAttributeRegex().Match(value);
-        return attr.Success ? attr.Groups["label"].Value : value;
+            return (null, null);
+
+        var attributes = AttributeRegex().Matches(value)
+            .ToDictionary(m => m.Groups["name"].Value.ToLowerInvariant(), m => m.Groups["value"].Value);
+        if (attributes.Count == 0)
+            return (value, null);
+
+        double? bars = attributes.TryGetValue("bars", out var b) &&
+            double.TryParse(b, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed : null;
+        return (attributes.GetValueOrDefault("label"), bars);
     }
 
     private static void TrimBlankLines(Song song)

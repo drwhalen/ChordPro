@@ -1,4 +1,5 @@
-# Sample ChordPro song
+# Sample ChordPro song. {duration} paces timed scrolling; {x_time: m:ss} markers
+# bring the next line to the reading position at that time.
 {title: Amazing Grace}
 {subtitle: Traditional hymn}
 {artist: John Newton}
@@ -6,11 +7,13 @@
 {capo: 0}
 {tempo: 72}
 {time: 3/4}
+{duration: 2:40}
 
 {c: Intro}
 [G] [C] [G] [D]
 
 {start_of_verse: Verse 1}
+{x_time: 0:12}
 A[G]mazing [G7]grace, how [C]sweet the [G]sound
 That saved a wretch like [D]me
 I [G]once was [G7]lost, but [C]now am [G]found
@@ -23,6 +26,7 @@ Praise God for [D]grace so [G]free
 {end_of_chorus}
 
 {start_of_verse: Verse 2}
+{x_time: 1:05}
 'Twas [G]grace that [G7]taught my [C]heart to [G]fear
 And grace my fears re[D]lieved
 How [G]precious [G7]did that [C]grace ap[G]pear
