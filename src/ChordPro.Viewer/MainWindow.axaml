@@ -69,6 +69,13 @@
                     <Button x:Name="CapoResetButton" Classes="value" Content="0" IsEnabled="False"
                             Click="OnCapoResetClick" ToolTip.Tip="Reset to the song's capo" />
                     <Button Content="+" Click="OnCapoUpClick" ToolTip.Tip="Capo one fret higher (chords change, pitch stays)" />
+                    <Button x:Name="CapoSuggestButton" Content="Suggest…" ToolTip.Tip="Find the capo position with the easiest chords">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnCapoSuggestOpening">
+                                <StackPanel x:Name="CapoSuggestions" Spacing="4" MinWidth="300" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <ComboBox x:Name="ScrollModeBox" MinWidth="120" SelectionChanged="OnScrollModeChanged"
@@ -92,6 +99,8 @@
                                 <StackPanel Spacing="6" MinWidth="180">
                                     <CheckBox x:Name="ShowChordsCheck" Content="Show chords" IsCheckedChanged="OnViewOptionChanged" />
                                     <CheckBox x:Name="ShowDiagramsCheck" Content="Chord diagrams" IsCheckedChanged="OnViewOptionChanged" />
+                                <CheckBox x:Name="SimplifyChordsCheck" Content="Easy chords" IsCheckedChanged="OnViewOptionChanged"
+                                          ToolTip.Tip="Show simpler chords: Cmaj9 → C, Am7 → Am, G/B → G, F#m7b5 → F#m" />
                                     <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
                                     <RadioButton x:Name="GuitarRadio" GroupName="Instrument" Content="Guitar" IsCheckedChanged="OnViewOptionChanged" />
                                     <RadioButton x:Name="UkuleleRadio" GroupName="Instrument" Content="Ukulele" IsCheckedChanged="OnViewOptionChanged" />

@@ -34,6 +34,7 @@ public sealed class AppSettings
     public List<string> SetlistSongs { get; set; } = [];
     public bool ShowChords { get; set; } = true;
     public bool ShowDiagrams { get; set; }
+    public bool SimplifyChords { get; set; }
     public string Instrument { get; set; } = "Guitar";
     public bool SidebarVisible { get; set; } = true;
     public string Theme { get; set; } = SongTheme.SystemThemeName;

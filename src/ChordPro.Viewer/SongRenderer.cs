@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using ChordPro.Core;
@@ -24,6 +25,9 @@ public sealed record SongPalette(IBrush Background, IBrush Text, IBrush MutedTex
     }
 }
 
+/// <summary>A chord the user tapped: its name as shown, and the song's own fingering for it if that applies.</summary>
+public sealed record ChordTap(string Name, ChordShape? DefinedShape, Control Anchor);
+
 public sealed record RenderOptions
 {
     public double FontSize { get; init; } = 16;
@@ -36,6 +40,10 @@ public sealed record RenderOptions
     public Instrument Instrument { get; init; } = Instrument.Guitar;
     public int Columns { get; init; } = 1;
     public SongPalette Palette { get; init; } = SongPalette.FromTheme(SongTheme.Day);
+    /// <summary>Show easier forms of chords (Cmaj9 → C, Am7 → Am, G/B → G).</summary>
+    public bool SimplifyChords { get; init; }
+    /// <summary>Called when a chord or diagram is tapped; null makes chords not tappable (e.g. printing).</summary>
+    public Action<ChordTap>? ChordTapped { get; init; }
 }
 
 /// <summary>Builds a read-only visual tree for a <see cref="Song"/>.</summary>
@@ -52,6 +60,7 @@ public sealed partial class SongRenderer(RenderOptions options)
 
     private int _shift;
     private bool? _preferFlats;
+    private Song? _song;
 
     /// <summary>
     /// The rendered song as page-layout groups, in display order: the header, the chord diagrams,
@@ -72,6 +81,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         var fileCapo = FileCapo(song);
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
         _preferFlats = ChordTransposer.PrefersFlats(song.Key, _shift);
+        _song = song;
         Groups.Clear();
         LineControls.Clear();
 
@@ -133,34 +143,28 @@ public sealed partial class SongRenderer(RenderOptions options)
 
     private Control? RenderDiagrams(Song song)
     {
-        var names = song.Sections
-            .Where(s => s.Kind is not (SectionKind.Tab or SectionKind.Grid))
-            .SelectMany(s => s.Lines.OfType<LyricLine>())
-            .SelectMany(l => l.Segments)
-            .Select(s => s.Chord)
-            .OfType<string>()
-            .Where(c => c.Length > 0)
-            .Distinct()
+        // One diagram per chord as shown (after simplifying, Am7 and Am are the same chord).
+        var chords = song.ChordUsages()
+            .Select(written => (Written: written, Name: DisplayChord(written)))
+            .DistinctBy(c => c.Name)
             .ToList();
 
         var panel = new WrapPanel();
-        foreach (var written in names)
+        foreach (var (written, name) in chords)
         {
-            var name = TransposeChord(written);
-            // A {define} applies to the chord as written, on a six-string guitar.
-            var shape = _shift == 0 && options.Instrument.StringCount == 6 &&
-                        song.ChordDefinitions.TryGetValue(written, out var defined) && defined.Frets.Count == 6
-                ? defined
-                : ChordShapeFinder.Find(name, options.Instrument);
+            var defined = DefinedShape(song, written, name);
+            var shape = defined ?? ChordShapeFinder.Find(name, options.Instrument);
             if (shape is null)
                 continue;
 
-            panel.Children.Add(new ChordDiagram(name, shape, FontSize)
+            var diagram = new ChordDiagram(name, shape, FontSize)
             {
                 Margin = new Thickness(0, 0, FontSize * 0.5, FontSize * 0.5),
                 Foreground = Palette.Text,
                 Accent = Palette.Chord,
-            });
+            };
+            MakeTappable(diagram, name, defined);
+            panel.Children.Add(diagram);
         }
 
         return panel.Children.Count == 0 ? null : panel;
@@ -297,16 +301,45 @@ public sealed partial class SongRenderer(RenderOptions options)
 
     private TextBlock ChordText(string? chord)
     {
-        var text = Text(chord is null ? "" : TransposeChord(chord), FontSize * 0.9, FontWeight.Bold);
+        var name = chord is null ? "" : DisplayChord(chord);
+        var text = Text(name, FontSize * 0.9, FontWeight.Bold);
         if (chord is not null)
         {
             text.Margin = new Thickness(0, 0, FontSize * 0.4, 0);
             text.Foreground = Palette.Chord;
+            if (name.Length > 0)
+                MakeTappable(text, name, DefinedShape(_song!, chord, name));
         }
         return text;
     }
 
     private string TransposeChord(string chord) => ChordTransposer.Transpose(chord, _shift, _preferFlats);
+
+    // The chord as it should be shown: simplified if asked, then moved for transposition and capo.
+    private string DisplayChord(string written) =>
+        TransposeChord(options.SimplifyChords ? ChordSimplifier.Simplify(written) : written);
+
+    // A {define} applies to the chord exactly as written, on a six-string guitar.
+    private ChordShape? DefinedShape(Song song, string written, string shown) =>
+        shown == written && options.Instrument.StringCount == 6 &&
+        song.ChordDefinitions.TryGetValue(written, out var defined) && defined.Frets.Count == 6
+            ? defined
+            : null;
+
+    private void MakeTappable(Control control, string name, ChordShape? defined)
+    {
+        if (options.ChordTapped is not { } tapped)
+            return;
+        // The "chord" class lets page-turn taps ignore taps on chords.
+        control.Classes.Add("chord");
+        control.Cursor = new Cursor(StandardCursorType.Hand);
+        ToolTip.SetTip(control, $"Show {name} fingerings");
+        control.Tapped += (_, e) =>
+        {
+            tapped(new ChordTap(name, defined, control));
+            e.Handled = true;
+        };
+    }
 
     private Control RenderComment(CommentLine comment)
     {

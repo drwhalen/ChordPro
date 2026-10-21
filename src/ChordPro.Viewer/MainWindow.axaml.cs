@@ -35,6 +35,7 @@ public partial class MainWindow : Window
 
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly SmartScroller _scroller;
+    private readonly Flyout _chordFlyout = new() { Placement = PlacementMode.Bottom, ShowMode = FlyoutShowMode.Standard };
     private readonly DispatcherTimer _reloadTimer;
     private FileSystemWatcher? _watcher;
 
@@ -207,6 +208,8 @@ public partial class MainWindow : Window
         ShowDiagrams = _settings.ShowDiagrams,
         Instrument = Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar,
         Palette = SongPalette.FromTheme(CurrentTheme),
+        SimplifyChords = _settings.SimplifyChords,
+        ChordTapped = ShowChordPopup,
     };
 
     private void ShowMessage(string message)
@@ -291,6 +294,83 @@ public partial class MainWindow : Window
         SaveSongSettings();
         UpdateSongControls();
         RenderSong();
+    }
+
+    // ---- Chord popups and capo suggestions -----------------------------------------------------
+
+    private Instrument CurrentInstrument => Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar;
+
+    private void ShowChordPopup(ChordTap tap)
+    {
+        var shapes = new List<(ChordShape, string?)>();
+        if (tap.DefinedShape is { } defined)
+            shapes.Add((defined, "From the song"));
+        shapes.AddRange(ChordShapeFinder.Alternatives(tap.Name, CurrentInstrument)
+            .Where(s => !s.Equals(tap.DefinedShape))
+            .Select(s => (s, (string?)null)));
+
+        // One popup at a time: tapping another chord replaces it.
+        _chordFlyout.Hide();
+        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _fontSize, SongPalette.FromTheme(CurrentTheme));
+        _chordFlyout.ShowAt(tap.Anchor);
+    }
+
+    private void OnCapoSuggestOpening(object? sender, EventArgs e)
+    {
+        CapoSuggestions.Children.Clear();
+        if (_song is null)
+            return;
+
+        // Work from the chords as heard, so every suggestion sounds the same as now.
+        var sounding = _transpose + FileCapo;
+        var preferFlats = ChordTransposer.PrefersFlats(_song.Key, sounding);
+        var chords = _song.ChordUsages()
+            .Select(c => ChordTransposer.Transpose(_settings.SimplifyChords ? ChordSimplifier.Simplify(c) : c, sounding, preferFlats))
+            .GroupBy(c => c)
+            .Select(g => (g.Key, g.Count()))
+            .ToList();
+        if (chords.Count == 0)
+        {
+            CapoSuggestions.Children.Add(new TextBlock { Text = "This song has no chords." });
+            return;
+        }
+
+        var soundingKey = _song.Key is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
+        var current = _capo ?? FileCapo;
+        CapoSuggestions.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 4) });
+
+        foreach (var suggestion in CapoSuggester.Suggest(chords, CurrentInstrument, soundingKey).Take(4))
+        {
+            var shapesKey = soundingKey is null ? null
+                : ChordTransposer.Transpose(soundingKey, -suggestion.Capo, ChordTransposer.PrefersFlats(soundingKey, -suggestion.Capo));
+            var title = suggestion.Capo == 0 ? "No capo" : $"Capo {suggestion.Capo}";
+            if (shapesKey is not null)
+                title += $" · {shapesKey} shapes";
+            if (suggestion.Capo == current)
+                title += "  (current)";
+            var barre = suggestion.BarreChords switch { 0 => "no barre chords", 1 => "1 barre chord", var n => $"{n} barre chords" };
+
+            var button = new Button
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = title, FontWeight = FontWeight.SemiBold },
+                        new TextBlock { Text = $"{string.Join("  ", suggestion.Chords)}  ·  {barre}", Opacity = 0.75, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
+                    },
+                },
+            };
+            var capo = suggestion.Capo;
+            button.Click += (_, _) =>
+            {
+                CapoSuggestButton.Flyout?.Hide();
+                SetCapo(capo);
+            };
+            CapoSuggestions.Children.Add(button);
+        }
     }
 
     private void UpdateSongControls()
@@ -434,6 +514,8 @@ public partial class MainWindow : Window
         if (_scrollMode != ScrollMode.Manual || _pressPosition is not { } pressed)
             return;
         _pressPosition = null;
+        if (e.Source is StyledElement source && source.Classes.Contains("chord"))
+            return; // tapping a chord shows its fingerings instead
         var released = e.GetPosition(SongScroller);
         var size = SongScroller.Bounds.Size;
         // A tap, not a drag, and not on the scroll bar.
@@ -518,6 +600,7 @@ public partial class MainWindow : Window
         _updatingViewOptions = true;
         ShowChordsCheck.IsChecked = _settings.ShowChords;
         ShowDiagramsCheck.IsChecked = _settings.ShowDiagrams;
+        SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
         GuitarRadio.IsChecked = _settings.Instrument != Instrument.Ukulele.Name;
         UkuleleRadio.IsChecked = _settings.Instrument == Instrument.Ukulele.Name;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
@@ -541,6 +624,7 @@ public partial class MainWindow : Window
             return;
         _settings.ShowChords = ShowChordsCheck.IsChecked == true;
         _settings.ShowDiagrams = ShowDiagramsCheck.IsChecked == true;
+        _settings.SimplifyChords = SimplifyChordsCheck.IsChecked == true;
         _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name : Instrument.Guitar.Name;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _settings.Save();

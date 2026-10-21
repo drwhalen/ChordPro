@@ -23,7 +23,7 @@ public static class PdfExporter
         var contentWidth = (pageWidth - 2 * Margin) / PointsPerDip;
         var contentHeight = (pageHeight - 2 * Margin - FooterHeight) / PointsPerDip;
 
-        var renderer = new SongRenderer(options with { Palette = SongPalette.Print, Columns = 1, FontSize = PrintFontSize });
+        var renderer = new SongRenderer(options with { Palette = SongPalette.Print, Columns = 1, FontSize = PrintFontSize, ChordTapped = null });
         var root = renderer.Render(song);
         root.Measure(new Size(contentWidth, double.PositiveInfinity));
         root.Arrange(new Rect(0, 0, contentWidth, root.DesiredSize.Height));

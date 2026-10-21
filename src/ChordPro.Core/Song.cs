@@ -22,6 +22,16 @@ public sealed class Song
     /// <summary>Guitar fingerings declared in the file with <c>{define}</c>, keyed by chord name.</summary>
     public Dictionary<string, ChordShape> ChordDefinitions { get; } = [];
 
+    /// <summary>Every chord played, in order and with repeats (tab and grid sections excluded).</summary>
+    public IEnumerable<string> ChordUsages() =>
+        Sections
+            .Where(s => s.Kind is not (SectionKind.Tab or SectionKind.Grid))
+            .SelectMany(s => s.Lines.OfType<LyricLine>())
+            .SelectMany(l => l.Segments)
+            .Select(s => s.Chord)
+            .OfType<string>()
+            .Where(c => c.Length > 0);
+
     public string? GetMeta(string name) =>
         Metadata.TryGetValue(name, out var values) && values.Count > 0 ? values[0] : null;
 

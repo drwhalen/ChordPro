@@ -21,6 +21,38 @@ public static class ChordShapeFinder
                 ? StandardShapes.Find(chord, instrument) ?? FindAll(chord, instrument).FirstOrDefault()
                 : null);
 
+    /// <summary>
+    /// A few good fingerings in different places on the neck: the standard shape (if any) first,
+    /// then the easiest comfortable shape at each other position, in order up the neck. At most
+    /// <paramref name="max"/> shapes.
+    /// </summary>
+    public static IReadOnlyList<ChordShape> Alternatives(string chordName, Instrument instrument, int max = 6)
+    {
+        if (ChordName.TryParse(chordName) is not { } chord)
+            return [];
+
+        var first = StandardShapes.Find(chord, instrument) ?? FindAll(chord, instrument).FirstOrDefault();
+        if (first is null)
+            return [];
+
+        // One shape per neck position, so paging shows genuinely different voicings. Up the neck,
+        // only closed (movable) shapes within a three-fret reach: open strings ringing against
+        // high frets are rarely what a player wants.
+        var others = FindAll(chord, instrument)
+            .Where(s => s.BaseFret != first.BaseFret && Span(s) <= 2 && (s.BaseFret == 1 || !s.Frets.Contains(0)))
+            .GroupBy(s => s.BaseFret)
+            .Select(g => g.First()) // FindAll is best first
+            .OrderBy(s => s.BaseFret)
+            .Take(max - 1);
+        return [first, .. others];
+    }
+
+    private static int Span(ChordShape shape)
+    {
+        var fretted = shape.Frets.Where(f => f > 0).ToList();
+        return fretted.Count == 0 ? 0 : fretted.Max() - fretted.Min();
+    }
+
     /// <summary>All playable fingerings, best first.</summary>
     public static IReadOnlyList<ChordShape> FindAll(ChordName chord, Instrument instrument)
     {
