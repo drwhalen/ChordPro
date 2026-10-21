@@ -54,10 +54,11 @@ public sealed partial class SongRenderer(RenderOptions options)
     private bool? _preferFlats;
 
     /// <summary>
-    /// The smallest pieces the rendered song can be split between (header, lines, diagram rows), in
-    /// display order. Used to choose page breaks when printing.
+    /// The rendered song as page-layout groups, in display order: the header, the chord diagrams,
+    /// then one group per section holding its lines (each line is unbreakable, so a chord stays
+    /// with its lyric). Used to choose page breaks and page turns.
     /// </summary>
-    public List<Control> Blocks { get; } = [];
+    public List<(IReadOnlyList<Control> Lines, bool KeepWithNext)> Groups { get; } = [];
 
     /// <summary>The control showing each line, keyed by section and line index (hidden lines are absent).</summary>
     public Dictionary<(Section, int), Control> LineControls { get; } = [];
@@ -71,14 +72,20 @@ public sealed partial class SongRenderer(RenderOptions options)
         var fileCapo = FileCapo(song);
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
         _preferFlats = ChordTransposer.PrefersFlats(song.Key, _shift);
-        Blocks.Clear();
+        Groups.Clear();
         LineControls.Clear();
 
+        // The title and the chord diagrams stay on the same page as the start of the song.
         var root = new StackPanel { Spacing = FontSize };
-        root.Children.Add(Block(RenderHeader(song, fileCapo)));
+        var header = RenderHeader(song, fileCapo);
+        root.Children.Add(header);
+        Groups.Add(([header], true));
 
         if (options.ShowChords && options.ShowDiagrams && RenderDiagrams(song) is { } diagrams)
+        {
             root.Children.Add(diagrams);
+            Groups.Add(([diagrams], true));
+        }
 
         var sections = song.Sections.Where(s => options.ShowChords || !IsChordsOnly(s)).ToList();
         if (options.Columns <= 1 || sections.Count < 2)
@@ -156,7 +163,7 @@ public sealed partial class SongRenderer(RenderOptions options)
             });
         }
 
-        return panel.Children.Count == 0 ? null : Block(panel);
+        return panel.Children.Count == 0 ? null : panel;
     }
 
     // Splits sections across columns so each holds roughly the same number of lines.
@@ -217,7 +224,11 @@ public sealed partial class SongRenderer(RenderOptions options)
             LineControls[(section, shown[i].Index)] = lines[i];
 
         foreach (var line in lines)
-            body.Children.Add(Block(line));
+            body.Children.Add(line);
+        // A section of only comments (like "Solo" before an instrumental line) leads into the next one.
+        var leadIn = section.Lines.All(l => l is CommentLine or BlankLine);
+        if (lines.Count > 0)
+            Groups.Add((lines, leadIn));
 
         if (section.Kind != SectionKind.Chorus)
             return body;
@@ -322,12 +333,6 @@ public sealed partial class SongRenderer(RenderOptions options)
             border.Background = Palette.CommentBackground;
         }
         return border;
-    }
-
-    private T Block<T>(T control) where T : Control
-    {
-        Blocks.Add(control);
-        return control;
     }
 
     private TextBlock Text(string text, double size, FontWeight? weight = null, bool muted = false,

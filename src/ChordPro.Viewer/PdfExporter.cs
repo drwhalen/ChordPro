@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Skia.Helpers;
 using Avalonia.VisualTree;
 using ChordPro.Core;
+using ChordPro.Core.Layout;
 using SkiaSharp;
 
 namespace ChordPro.Viewer;
@@ -34,7 +35,7 @@ public static class PdfExporter
         await DrawingContextHelper.RenderAsync(recording, root, new Rect(root.Bounds.Size), new Vector(96, 96));
         using var picture = recorder.EndRecording();
 
-        var starts = PageStarts(renderer.Blocks, root, contentHeight);
+        var starts = PageLayout.PageStarts(PageGroups(renderer, root), contentHeight);
         var title = song.Title ?? Path.GetFileNameWithoutExtension(path);
 
         await using var stream = File.Create(path);
@@ -67,33 +68,13 @@ public static class PdfExporter
         document.Close();
     }
 
-    /// <summary>Where each page starts (in DIPs), breaking between blocks so no line is cut in half.</summary>
-    private static List<double> PageStarts(IEnumerable<Control> blocks, Visual root, double pageHeight)
-    {
-        var starts = new List<double> { 0 };
-        var pageStart = 0.0;
+    /// <summary>The renderer's groups with each line's position within <paramref name="root"/>.</summary>
+    public static List<PageGroup> PageGroups(SongRenderer renderer, Visual root) =>
+        [.. renderer.Groups.Select(g => new PageGroup(
+            [.. g.Lines.Select(line => new LineExtent(TopOf(line, root), TopOf(line, root) + line.Bounds.Height))],
+            g.KeepWithNext))];
 
-        foreach (var (top, bottom) in blocks.Select(b => (Top: TopOf(b, root), Bottom: TopOf(b, root) + b.Bounds.Height)).OrderBy(b => b.Top))
-        {
-            if (bottom - pageStart <= pageHeight)
-                continue;
-            if (top > pageStart)
-            {
-                pageStart = top;
-                starts.Add(pageStart);
-            }
-            // A single block taller than a page has to be cut.
-            while (bottom - pageStart > pageHeight)
-            {
-                pageStart += pageHeight;
-                starts.Add(pageStart);
-            }
-        }
-
-        return starts;
-    }
-
-    private static double TopOf(Visual visual, Visual root)
+    public static double TopOf(Visual visual, Visual root)
     {
         var y = 0.0;
         for (Visual? v = visual; v is not null && v != root; v = v.GetVisualParent())

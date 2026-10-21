@@ -54,6 +54,12 @@ public sealed class SmartScroller
     /// <summary>A rate that changes while playing (following audio); 0 holds the view still.</summary>
     public Func<double>? LiveRate { get; set; }
 
+    /// <summary>
+    /// Where a page turn (+1 down, -1 up) should move the view, given the current offset and view
+    /// height; null falls back to most of a screen.
+    /// </summary>
+    public Func<int, double, double, double?>? PageTarget { get; set; }
+
     public bool IsRunning { get; private set; }
 
     /// <summary>Position on the timeline, in seconds.</summary>
@@ -100,7 +106,9 @@ public sealed class SmartScroller
     public void Page(int direction)
     {
         var from = _scroller.Offset.Y;
-        var to = Math.Clamp(from + direction * _scroller.Viewport.Height * PageFraction, 0, MaxOffset);
+        var target = PageTarget?.Invoke(direction, from, _scroller.Viewport.Height)
+            ?? from + direction * _scroller.Viewport.Height * PageFraction;
+        var to = Math.Clamp(target, 0, MaxOffset);
         _page = (from, to, DateTime.UtcNow);
         _timer.Start();
     }

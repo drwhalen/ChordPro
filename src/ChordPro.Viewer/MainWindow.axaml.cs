@@ -10,6 +10,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ChordPro.Core;
 using ChordPro.Core.Chords;
+using ChordPro.Core.Layout;
 using ChordPro.Core.Scrolling;
 using ChordPro.Core.Themes;
 
@@ -68,7 +69,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _scroller = new SmartScroller(SongScroller) { TimelineFactory = BuildTimeline };
+        _scroller = new SmartScroller(SongScroller) { TimelineFactory = BuildTimeline, PageTarget = PageTarget };
         _scroller.RunningChanged += (_, _) => OnScrollRunningChanged();
         _scroller.Progressed += (_, _) => UpdateScrollStatus();
         // Tap the top or bottom of the song to turn pages in manual mode.
@@ -406,6 +407,19 @@ public partial class MainWindow : Window
         ApplyScrollRate();
         SaveSongSettings();
         UpdateScrollControls();
+    }
+
+    // Page turns land on line boundaries and keep a chorus together where it fits on screen.
+    private double? PageTarget(int direction, double offset, double viewportHeight)
+    {
+        if (_renderer is null || _renderedColumns > 1)
+            return null; // with two columns there's no single top-to-bottom order of lines
+        var groups = PdfExporter.PageGroups(_renderer, SongHost);
+        var target = direction > 0
+            ? PageLayout.NextPageTop(groups, offset, viewportHeight) ?? double.MaxValue
+            : PageLayout.PreviousPageTop(groups, offset, viewportHeight);
+        // Leave a little room above the new top line rather than pressing it against the edge.
+        return target is > 0 and < double.MaxValue ? target - _fontSize * 0.5 : target;
     }
 
     private void OnPageUpClick(object? sender, RoutedEventArgs e) => _scroller.Page(-1);

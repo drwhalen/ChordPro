@@ -27,6 +27,11 @@ dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
 | **Stage** | Full screen, larger text, and two columns on wide screens. Esc to exit. |
 | **PDF…** | Save a print-ready PDF (Letter or A4 by region) and open it in your PDF viewer to print. |
 
+Page layout: a chord is never separated from its lyric. Printed pages and on-screen page turns keep a
+section (a chorus, a verse) together whenever it fits; a longer section breaks between lines with at least
+two lines on each side; and the title, chord diagrams and comment-only lead-ins like "Solo" stay with
+what follows them.
+
 It also:
 - remembers transpose, capo, text size and scroll speed for each song, plus your library, setlist and view options;
 - reloads the song when it is saved in another editor, keeping your place;
