@@ -105,6 +105,8 @@
                     <Button x:Name="SlowerButton" Content="−" Click="OnScrollSlowerClick" />
                     <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="34" TextAlignment="Center" />
                     <Button x:Name="FasterButton" Content="+" Click="OnScrollFasterClick" />
+                    <Button x:Name="TapTempoButton" Content="Tap" Click="OnTapTempoClick"
+                            ToolTip.Tip="Tap along with the beat to set the tempo (remembered for this song)" />
                     <Button x:Name="PageUpButton" Content="▲" Click="OnPageUpClick" ToolTip.Tip="Page up (Page Up, Shift+Space, or tap the top of the song)" />
                     <Button x:Name="PageDownButton" Content="▼" Click="OnPageDownClick" ToolTip.Tip="Page down (Page Down, Space, or tap the bottom of the song)" />
                 </StackPanel>

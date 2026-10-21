@@ -46,6 +46,8 @@ public sealed class AppSettings
     public bool SimplifyChords { get; set; }
     /// <summary>Songs' <c>{key}</c> is the key heard with the capo on, as LivePrompter writes it.</summary>
     public bool KeyIncludesCapo { get; set; }
+    /// <summary>The library folder <see cref="KeyIncludesCapo"/> was last chosen for, by guessing or by hand.</summary>
+    public string? KeyConventionFolder { get; set; }
     /// <summary>The tuner's reference pitch for A4, in Hz.</summary>
     public double TunerReference { get; set; } = 440;
     public string Instrument { get; set; } = "Guitar";

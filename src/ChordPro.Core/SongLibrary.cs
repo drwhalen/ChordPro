@@ -153,6 +153,42 @@ public static partial class SongLibrary
             .Select(k => k.Choice)
             .ToList();
 
+    /// <summary>
+    /// Guesses whether a library's <c>{key}</c> includes the capo (the key you hear, as LivePrompter
+    /// charts are written) or is the key of the chords as written (ChordPro's meaning). Songs with a
+    /// capo decide it: a song usually starts or ends on its key chord, so if that chord plus the capo
+    /// is the <c>{key}</c>, the key includes the capo. Null when no song gives a clear answer.
+    /// </summary>
+    public static bool? GuessKeyIncludesCapo(IEnumerable<SongInfo> songs)
+    {
+        int written = 0, heard = 0;
+        foreach (var info in songs.Where(s => s.Capo > 0 && s.Key is not null))
+        {
+            if (ParseKey(info.Key!) is not var (root, minor))
+                continue;
+            List<ChordName> chords;
+            try
+            {
+                chords = [.. ChordProParser.ParseFile(info.Path).ChordUsages().Select(ChordName.TryParse).OfType<ChordName>()];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+            if (chords.Count == 0)
+                continue;
+
+            bool EndsOnKey(int shift) => new[] { chords[0], chords[^1] }
+                .Any(c => (c.Root + shift) % 12 == root && c.Intervals.Contains(3) == minor);
+            var (asWritten, asHeard) = (EndsOnKey(0), EndsOnKey(info.Capo));
+            if (asWritten && !asHeard)
+                written++;
+            else if (asHeard && !asWritten)
+                heard++;
+        }
+        return written == heard ? null : heard > written;
+    }
+
     /// <summary>True when two keys are the same, however they're spelled: <c>C#</c> and <c>Db</c>, <c>Em</c> and <c>E minor</c>.</summary>
     public static bool SameKey(string? a, string? b)
     {

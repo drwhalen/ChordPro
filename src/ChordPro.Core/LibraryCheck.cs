@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using ChordPro.Core.Chords;
+using ChordPro.Core.Layout;
 
 namespace ChordPro.Core;
 
@@ -11,7 +12,7 @@ public sealed record LibraryIssue(string Path, string Name, string Problem);
 /// with nothing under them, a key that disagrees with the file name, a title and artist swapped
 /// relative to the file name, bracketed text that isn't a
 /// chord, fingerings whose name doesn't match the chord as written, and setlist lines that match
-/// no song.
+/// no song. For a LivePrompter library it also finds lines LivePrompter would cut off.
 /// </summary>
 public static partial class LibraryCheck
 {
@@ -26,7 +27,8 @@ public static partial class LibraryCheck
     // "No chord" markers that aren't chord names but are used in brackets on purpose.
     private static readonly HashSet<string> NoChord = new(StringComparer.OrdinalIgnoreCase) { "N.C.", "NC", "N.C", "-", "x", "/", "|" };
 
-    public static List<LibraryIssue> Run(IEnumerable<SongInfo> songs, IEnumerable<string> setlists)
+    /// <param name="livePrompter">Also report lines too wide for LivePrompter's screen.</param>
+    public static List<LibraryIssue> Run(IEnumerable<SongInfo> songs, IEnumerable<string> setlists, bool livePrompter = false)
     {
         var library = songs.ToList();
         var issues = new List<LibraryIssue>();
@@ -34,7 +36,11 @@ public static partial class LibraryCheck
         {
             try
             {
-                issues.AddRange(CheckSong(info.Path, ChordProParser.ParseFile(info.Path)).Select(problem => new LibraryIssue(info.Path, info.Title, problem)));
+                var text = File.ReadAllText(info.Path);
+                var problems = CheckSong(info.Path, ChordProParser.Parse(text));
+                if (livePrompter)
+                    problems = problems.Concat(CheckLineWidths(text));
+                issues.AddRange(problems.Select(problem => new LibraryIssue(info.Path, info.Title, problem)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -57,6 +63,21 @@ public static partial class LibraryCheck
             }
         }
         return issues;
+    }
+
+    /// <summary>Lines of a chart that LivePrompter would cut off, with where the cut falls.</summary>
+    public static IEnumerable<string> CheckLineWidths(string text)
+    {
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (LivePrompterWidth.CutOff(lines[i]) is { } shown)
+            {
+                // The last few words before the cut are enough to find the line.
+                var tail = shown.Length > 30 ? "…" + shown[^30..].TrimStart() : shown;
+                yield return $"Line {i + 1} is too wide for LivePrompter, which cuts it off after “{tail}”";
+            }
+        }
     }
 
     /// <summary>The problems in one song; <paramref name="path"/> is only used for its file name.</summary>

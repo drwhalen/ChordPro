@@ -24,12 +24,15 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
 ## Layout
 
 - `src/ChordPro.Core` — all logic that doesn't need a UI, and everything that has unit tests:
-  - `ChordProParser`, `Song` (model), `ChordTransposer`, `Setlist`, `SongLibrary`, `SongTime`
+  - `ChordProParser`, `Song` (model), `ChordTransposer` (also written/sounding keys), `Setlist`
+    (incl. LivePrompter `.txt` setlists), `SongLibrary` (scan, group, filter, key-convention guess),
+    `LibraryCheck`, `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,
     `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument`
   - `Themes/SongTheme` (built-in and custom themes, WCAG contrast), `Layout/PageLayout` (page breaks and
-    page turns), `Scrolling/` (`MusicalTimeline`, `TimeMarkers`, `ScrollTimeline`, `TempoTracker`),
+    page turns), `Layout/LivePrompterWidth` (LivePrompter's 28 em line budget), `Scrolling/`
+    (`MusicalTimeline`, `TimeMarkers`, `ScrollTimeline`, `TempoTracker`, `TapTempo`),
     `Tuning/` (`PitchDetector` — YIN, `Note`)
 - `src/ChordPro.Viewer` — Avalonia UI. `MainWindow` wires everything; `SongRenderer` builds the song as
   controls from `RenderOptions` (also exposes `Groups` for pagination and `LineControls` for scrolling);

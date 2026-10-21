@@ -55,6 +55,8 @@ public partial class MainWindow : Window
     private ScrollMode _scrollMode = ScrollMode.Timed;
     private double _speed = 1;
     private double? _tempo;
+    private TapTempo _tapTempo = new();
+    private readonly Stopwatch _tapClock = Stopwatch.StartNew();
     private AudioFollower? _audio;
     private DateTime _lastStatusUpdate;
     private Point? _pressPosition;
@@ -142,6 +144,7 @@ public partial class MainWindow : Window
         _fontSize = songSettings.FontSize ?? DefaultFontSize;
         _speed = songSettings.ScrollSpeed ?? 1;
         _tempo = songSettings.Tempo;
+        _tapTempo = new TapTempo();
         _scrollMode = Enum.TryParse<ScrollMode>(songSettings.ScrollMode, out var mode) ? mode : ScrollMode.Timed;
         ApplyScrollRate();
 
@@ -515,6 +518,22 @@ public partial class MainWindow : Window
 
     private void OnScrollFasterClick(object? sender, RoutedEventArgs e) => StepScrollSpeed(+1);
 
+    // Each tap after the first sets the tempo from the beat tapped so far.
+    private void OnTapTempoClick(object? sender, RoutedEventArgs e)
+    {
+        if (_tapTempo.Tap(_tapClock.Elapsed) is not { } tapped)
+        {
+            StatusText.Text = "Keep tapping on the beat…";
+            return;
+        }
+        var tempo = Math.Clamp(Math.Round(tapped), MinTempo, MaxTempo);
+        _tempo = Math.Abs(tempo - (_musical?.Tempo ?? 0)) < 0.5 ? null : tempo;
+        ApplyScrollRate();
+        SaveSongSettings();
+        UpdateScrollControls();
+        StatusText.Text = $"Tempo {tempo:0} BPM from {_tapTempo.Count} taps";
+    }
+
     private void StepScrollSpeed(int direction)
     {
         if (_scrollMode == ScrollMode.Timed)
@@ -576,6 +595,7 @@ public partial class MainWindow : Window
         var manual = _scrollMode == ScrollMode.Manual;
         var timed = _scrollMode == ScrollMode.Timed;
         ScrollToggle.IsVisible = SlowerButton.IsVisible = SpeedText.IsVisible = FasterButton.IsVisible = !manual;
+        TapTempoButton.IsVisible = !manual && !timed;
         ScrollToggle.IsChecked = _scroller.IsRunning;
         ScrollToggle.Content = _scroller.IsRunning ? "❚❚ Scroll" : _scrollMode == ScrollMode.FollowAudio ? "▶ Listen" : "▶ Scroll";
 
@@ -674,6 +694,8 @@ public partial class MainWindow : Window
         _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name : Instrument.Guitar.Name;
         var keyConventionChanged = _settings.KeyIncludesCapo != (KeyIncludesCapoCheck.IsChecked == true);
         _settings.KeyIncludesCapo = KeyIncludesCapoCheck.IsChecked == true;
+        if (keyConventionChanged)
+            _settings.KeyConventionFolder = _settings.LibraryFolder; // a choice made by hand isn't guessed again
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _settings.Save();
         RenderSong();
@@ -998,6 +1020,7 @@ public partial class MainWindow : Window
             return;
         _library = library;
         _librarySetlists = setlists;
+        await GuessKeyConventionAsync(folder);
         LibraryFolderText.Text = $"{folder} · {_library.Count} songs";
         ToolTip.SetTip(LibraryFolderText, folder);
         RefreshLibraryFilterChoices();
@@ -1005,6 +1028,32 @@ public partial class MainWindow : Window
         ApplyLibraryFilter();
         if (_path is not null)
             RevealInLibrary(_path); // the song opened at startup may have loaded before the scan finished
+    }
+
+    // The first time a library is scanned, work out from its capo songs whether its keys include
+    // the capo (LivePrompter) or not (ChordPro), so keys show right without visiting the View menu.
+    private async Task GuessKeyConventionAsync(string folder)
+    {
+        if (_settings.KeyConventionFolder == folder)
+            return;
+        var songs = _library;
+        var guess = await Task.Run(() => SongLibrary.GuessKeyIncludesCapo(songs));
+        if (guess is not { } includesCapo)
+            return; // nothing to go on yet; try again on the next scan
+        _settings.KeyConventionFolder = folder;
+        _settings.Save();
+        if (includesCapo == _settings.KeyIncludesCapo)
+            return;
+        _settings.KeyIncludesCapo = includesCapo;
+        _settings.Save();
+        _updatingViewOptions = true;
+        KeyIncludesCapoCheck.IsChecked = includesCapo;
+        _updatingViewOptions = false;
+        RenderSong();
+        UpdateNextSong();
+        StatusText.Text = includesCapo
+            ? "This library's keys include the capo, as LivePrompter writes them; set in View"
+            : "This library's keys are the chords' keys, as ChordPro writes them; set in View";
     }
 
     // Rescan when songs are added, removed, renamed or edited, e.g. by a converter writing into the folder.
@@ -1049,7 +1098,9 @@ public partial class MainWindow : Window
         }
         var (songs, setlists) = (_library, _librarySetlists);
         StatusText.Text = "Checking the library…";
-        var issues = await Task.Run(() => LibraryCheck.Run(songs, setlists));
+        // A library whose keys include the capo is a LivePrompter library: check its line widths too.
+        var livePrompter = _settings.KeyIncludesCapo;
+        var issues = await Task.Run(() => LibraryCheck.Run(songs, setlists, livePrompter));
         StatusText.Text = _path is null ? "" : Path.GetFileName(_path);
 
         _checkWindow?.Close();
