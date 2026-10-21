@@ -32,9 +32,9 @@ Gatekeeper warnings, sign it with an Apple Developer ID certificate (hardened ru
 
 | Toolbar / sidebar | What it does |
 | --- | --- |
-| **Songs** sidebar → Library | Choose a folder; every `.cho/.chopro/.chordpro/.crd/.pro` file in it (and subfolders), plus `.txt` files that contain ChordPro, is listed by title and artist, with search. **Group by artist** shows collapsible artist headings instead (sorted ignoring a leading "The"). |
+| **Songs** sidebar → Library | Choose a folder; every `.cho/.chopro/.chordpro/.crd/.pro` file in it (and subfolders), plus `.txt` files that contain ChordPro, is listed by title and artist, with search. **Group by artist** or **by book** (`{book:}` tags; a song in several books is listed under each) shows collapsible headings instead, with artists sorted ignoring a leading "The". **Key** and **capo** filters narrow the list, e.g. songs in G played without a capo. |
 | Sidebar → Recent | The last 20 songs you opened. |
-| Sidebar → Setlist | Build an ordered list of songs: add, remove, reorder, save/open `.setlist` files, and step through with **◀ Previous / Next ▶** or the ← → keys (most page-turner pedals send arrow keys). |
+| Sidebar → Setlist | Build an ordered list of songs: add, remove, reorder, save/open `.setlist` files or LivePrompter setlists (a `.txt` file of song names, one per line), and step through with **◀ Previous / Next ▶** or the ← → keys (most page-turner pedals send arrow keys). |
 | **A− / A+** | Text size. |
 | **Transpose − / +** | Move the song up or down by semitones; chords and the key follow. Click the number to reset. |
 | **Capo − / +** | Choose the capo you're playing with. The pitch stays the same and the chord shapes change, e.g. a song in E with capo 2 shows D shapes. Starts at the file's `{capo}`. |
@@ -104,5 +104,6 @@ Settings live in `settings.json` under the user's local application-data folder;
 Metadata (`title`/`t`, `subtitle`/`st`, `artist`, `key`, `capo`, `tempo`, `time`, `duration`, `{meta: …}`),
 inline `[chords]`, comments (`c`, `ci`, `cb`), sections (`start_of_`/`end_of_` verse, chorus, bridge,
 tab, grid and custom, plus `soc`/`eoc`-style short forms and `label="…"`), `{chorus}` recall,
-`{define}` chord shapes, and `#` comment lines. Formatting and layout directives (fonts, columns, page
+`{define}`/`{chord}` chord shapes, `{book}`, and `#` comment lines. A short plain line ending in a colon
+(`Verse 1:`, `Intro:`) is a section heading, as in LivePrompter. Formatting and layout directives (fonts, columns, page
 breaks) are ignored.

@@ -29,6 +29,9 @@
             <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
             <Setter Property="BorderThickness" Value="4,0,0,0" />
         </Style>
+        <Style Selector="ListBox.byArtist Panel.artist">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
         <Style Selector="WrapPanel.buttons > Button">
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
@@ -38,11 +41,14 @@
         <DataTemplate DataType="core:SongInfo" x:DataType="core:SongInfo">
             <StackPanel Margin="0,2">
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding Artist}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding Artist, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <!-- Hidden under an artist heading, which already says it. -->
+                <Panel Classes="artist">
+                    <TextBlock Text="{Binding Artist}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding Artist, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </Panel>
             </StackPanel>
         </DataTemplate>
-        <DataTemplate DataType="local:ArtistHeader" x:DataType="local:ArtistHeader">
+        <DataTemplate DataType="local:GroupHeader" x:DataType="local:GroupHeader">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,2">
                 <TextBlock Text="{Binding Label}" FontWeight="Bold" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="1" Text="{Binding Count}" FontSize="12" Opacity="0.6" Margin="8,0,0,0"
@@ -144,7 +150,17 @@
                             </WrapPanel>
                             <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="CharacterEllipsis" />
                             <TextBox x:Name="SearchBox" Watermark="Search title, artist…" TextChanged="OnSearchChanged" />
-                            <CheckBox x:Name="GroupByArtistCheck" Content="Group by artist" Click="OnGroupByArtistClick" />
+                            <ComboBox x:Name="GroupByCombo" HorizontalAlignment="Stretch" SelectionChanged="OnGroupByChanged">
+                                <ComboBoxItem Content="No grouping" />
+                                <ComboBoxItem Content="Group by artist" />
+                                <ComboBoxItem Content="Group by book" />
+                            </ComboBox>
+                            <Grid ColumnDefinitions="*,6,*">
+                                <ComboBox x:Name="KeyFilterCombo" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged"
+                                          ToolTip.Tip="Show only songs in this key (the key you hear, with the capo on)" />
+                                <ComboBox x:Name="CapoFilterCombo" Grid.Column="2" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged"
+                                          ToolTip.Tip="Show only songs played with this capo" />
+                            </Grid>
                         </StackPanel>
                         <ListBox x:Name="LibraryList" SelectionChanged="OnSongListSelectionChanged" />
                     </DockPanel>

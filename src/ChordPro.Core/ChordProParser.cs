@@ -6,7 +6,9 @@ namespace ChordPro.Core;
 /// <summary>
 /// Parses text in ChordPro format (https://www.chordpro.org/chordpro/) into a <see cref="Song"/>.
 /// Supports metadata, comments, chorus/verse/bridge/tab/grid sections and the {chorus} recall
-/// directive. Unrecognised directives (fonts, page layout, chord definitions…) are ignored.
+/// directive. Unrecognised directives (fonts, page layout…) are ignored.
+/// A plain line ending in a colon (<c>Verse 1:</c>, <c>Intro:</c>) starts a labelled section, the way
+/// LivePrompter marks sections.
 /// </summary>
 public static partial class ChordProParser
 {
@@ -16,6 +18,10 @@ public static partial class ChordProParser
 
     [GeneratedRegex(@"\[(?<chord>[^\]]*)\]")]
     private static partial Regex ChordRegex();
+
+    // "Verse 1:" — short, with no chords or directives, so a lyric that ends in a colon stays a lyric.
+    [GeneratedRegex(@"^\s*(?<label>[^\s\[\]{}|][^\[\]{}]{0,39}?)\s*:\s*$")]
+    private static partial Regex HeadingRegex();
 
     // name="value" or name=value
     [GeneratedRegex(@"(?<name>[A-Za-z_][\w-]*)\s*=\s*(?:""(?<value>[^""]*)""|(?<value>\S+))")]
@@ -29,6 +35,7 @@ public static partial class ChordProParser
         ["album"] = "album", ["year"] = "year", ["copyright"] = "copyright",
         ["key"] = "key", ["capo"] = "capo", ["tempo"] = "tempo",
         ["time"] = "time", ["duration"] = "duration",
+        ["book"] = "book", // LivePrompter's collections
     };
 
     private static readonly Dictionary<string, SectionKind> SectionAliases = new(StringComparer.OrdinalIgnoreCase)
@@ -63,9 +70,10 @@ public static partial class ChordProParser
             current.Lines.Add(songLine);
         }
 
+        // A heading with nothing under it still shows, so its text isn't lost.
         void StartSection(Section section)
         {
-            if (current.Lines.Count > 0)
+            if (current.Lines.Count > 0 || current.Label is not null)
                 song.Sections.Add(current);
             current = section;
         }
@@ -91,6 +99,8 @@ public static partial class ChordProParser
             {
                 if (line.Length == 0)
                     AddLine(new BlankLine());
+                else if (!inSection && HeadingRegex().Match(line) is { Success: true } heading)
+                    StartSection(new Section(SectionKind.None, heading.Groups["label"].Value));
                 else if (preformatted)
                     AddLine(new PreformattedLine(line));
                 else
@@ -108,6 +118,13 @@ public static partial class ChordProParser
                     if (inSection)
                         EndSection();
                     var (label, bars) = ParseSectionValue(value);
+                    // A heading line just above {start_of_chorus} names the chorus rather than
+                    // standing as an empty section of its own.
+                    if (label is null && !inSection && current.Label is { } heading && current.Lines.All(l => l is BlankLine))
+                    {
+                        label = heading;
+                        current = new Section(SectionKind.None);
+                    }
                     StartSection(new Section(kind, label, bars));
                     inSection = true;
                 }
@@ -162,6 +179,10 @@ public static partial class ChordProParser
                 case "define" or "chord":
                     if (ParseDefinition(value) is var (chordName, shape))
                         song.ChordDefinitions[chordName] = shape;
+                    // LivePrompter lists fingerings under a "Chords:" heading; they're drawn as
+                    // diagrams, so the heading would only be left empty.
+                    if (!inSection && current.Label is not null && current.Lines.All(l => l is BlankLine))
+                        current = new Section(SectionKind.None);
                     break;
 
                 default:
@@ -173,7 +194,7 @@ public static partial class ChordProParser
 
         if (inSection && current.Kind == SectionKind.Chorus)
             lastChorus = current;
-        if (current.Lines.Count > 0)
+        if (current.Lines.Count > 0 || current.Label is not null)
             song.Sections.Add(current);
 
         TrimBlankLines(song);
@@ -296,6 +317,6 @@ public static partial class ChordProParser
             while (section.Lines.Count > 0 && section.Lines[^1] is BlankLine)
                 section.Lines.RemoveAt(section.Lines.Count - 1);
         }
-        song.Sections.RemoveAll(s => s.Lines.Count == 0);
+        song.Sections.RemoveAll(s => s.Lines.Count == 0 && s.Label is null);
     }
 }

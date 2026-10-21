@@ -23,7 +23,11 @@ public partial class MainWindow : Window
         Patterns = [.. SongLibrary.FileExtensions.Select(e => "*" + e), "*" + SongLibrary.TextExtension],
     };
 
-    private static readonly FilePickerFileType SetlistFiles = new("Setlists") { Patterns = ["*" + Setlist.FileExtension] };
+    private static readonly FilePickerFileType SetlistFiles = new("Setlists") { Patterns = ["*" + Setlist.FileExtension, "*" + SongLibrary.TextExtension] };
+
+    private static readonly FilePickerFileType ViewerSetlistFiles = new("ChordPro Viewer setlist") { Patterns = ["*" + Setlist.FileExtension] };
+
+    private static readonly FilePickerFileType LivePrompterSetlistFiles = new("LivePrompter setlist") { Patterns = ["*" + SongLibrary.TextExtension] };
 
     private const double DefaultFontSize = 16, MinFontSize = 10, MaxFontSize = 40;
     private const double StageFontScale = 1.4;
@@ -60,9 +64,10 @@ public partial class MainWindow : Window
     private WindowState _windowStateBeforeStage;
 
     private List<SongInfo> _library = [];
-    // Artist groups the user expanded while browsing, and ones they collapsed during the current search.
-    private readonly HashSet<string> _expandedArtists = new(StringComparer.CurrentCultureIgnoreCase);
-    private readonly HashSet<string> _collapsedSearchArtists = new(StringComparer.CurrentCultureIgnoreCase);
+    // Groups the user expanded while browsing, and ones they collapsed in the current search or filter.
+    private readonly HashSet<string> _expandedGroups = new(StringComparer.CurrentCultureIgnoreCase);
+    private readonly HashSet<string> _collapsedFilteredGroups = new(StringComparer.CurrentCultureIgnoreCase);
+    private bool _updatingLibraryFilters;
     private readonly Setlist _setlist = new();
     private string? _setlistPath;
     private bool _updatingLists;
@@ -90,9 +95,10 @@ public partial class MainWindow : Window
 
         ApplySavedSettings();
 
-        var startPath = initialPath ?? _settings.RecentFiles.FirstOrDefault(File.Exists);
-        if (startPath is not null)
-            LoadFile(startPath);
+        if (initialPath is not null)
+            Open(initialPath);
+        else if (_settings.RecentFiles.FirstOrDefault(File.Exists) is { } recent)
+            LoadFile(recent);
         else
             ShowMessage("Open a ChordPro file, choose a library folder, or drop a song onto this window.");
     }
@@ -630,7 +636,11 @@ public partial class MainWindow : Window
         SetSidebarVisible(_settings.SidebarVisible);
         SetTheme(_settings.Theme);
         LibraryFolderText.Text = _settings.LibraryFolder ?? "No folder chosen";
-        GroupByArtistCheck.IsChecked = _settings.GroupLibraryByArtist;
+        _updatingLibraryFilters = true;
+        GroupByCombo.SelectedIndex = (int)_settings.Grouping;
+        _updatingLibraryFilters = false;
+        LibraryList.Classes.Set("byArtist", Grouping == LibraryGrouping.Artist);
+        RefreshLibraryFilterChoices();
         if (_settings.LibraryFolder is not null)
             _ = ScanLibraryAsync();
 
@@ -859,7 +869,12 @@ public partial class MainWindow : Window
     public void OpenPath(string path)
     {
         Activate();
-        if (Path.GetExtension(path).Equals(Setlist.FileExtension, StringComparison.OrdinalIgnoreCase))
+        Open(path);
+    }
+
+    private void Open(string path)
+    {
+        if (Path.GetExtension(path).Equals(Setlist.FileExtension, StringComparison.OrdinalIgnoreCase) || Setlist.IsLivePrompterSetlist(path))
             OpenSetlist(path);
         else if (Directory.Exists(path))
             SetLibraryFolder(path);
@@ -879,7 +894,7 @@ public partial class MainWindow : Window
         });
 
         if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
-            LoadFile(path);
+            Open(path); // a LivePrompter setlist is a .txt file too
     }
 
     private async void OnExportPdfClick(object? sender, RoutedEventArgs e)
@@ -938,6 +953,7 @@ public partial class MainWindow : Window
         if (_settings.LibraryFolder is not { } folder || !Directory.Exists(folder))
         {
             _library = [];
+            RefreshLibraryFilterChoices();
             ApplyLibraryFilter();
             return;
         }
@@ -945,71 +961,109 @@ public partial class MainWindow : Window
         _library = await Task.Run(() => SongLibrary.Scan(folder));
         LibraryFolderText.Text = $"{folder} · {_library.Count} songs";
         ToolTip.SetTip(LibraryFolderText, folder);
+        RefreshLibraryFilterChoices();
         ApplyLibraryFilter();
         if (_path is not null)
             RevealInLibrary(_path); // the song opened at startup may have loaded before the scan finished
     }
 
-    private void OnSearchChanged(object? sender, TextChangedEventArgs e)
+    private void OnSearchChanged(object? sender, TextChangedEventArgs e) => OnLibraryFilterChanged();
+
+    private void OnLibraryFilterChanged(object? sender, SelectionChangedEventArgs e) => OnLibraryFilterChanged();
+
+    private void OnLibraryFilterChanged()
     {
-        _collapsedSearchArtists.Clear();
+        if (_updatingLibraryFilters)
+            return;
+        _collapsedFilteredGroups.Clear();
         ApplyLibraryFilter();
     }
 
-    private void OnGroupByArtistClick(object? sender, RoutedEventArgs e)
+    private void OnGroupByChanged(object? sender, SelectionChangedEventArgs e)
     {
-        _settings.GroupLibraryByArtist = GroupByArtistCheck.IsChecked == true;
+        if (_updatingLibraryFilters)
+            return;
+        _settings.LibraryGroupBy = Grouping.ToString();
         _settings.Save();
-        if (_path is not null && ArtistOf(_path) is { } artist)
-            _expandedArtists.Add(artist);
+        // Group names mean something else under the new grouping.
+        _expandedGroups.Clear();
+        _collapsedFilteredGroups.Clear();
+        LibraryList.Classes.Set("byArtist", Grouping == LibraryGrouping.Artist);
         ApplyLibraryFilter();
+        if (_path is not null)
+            RevealInLibrary(_path);
     }
 
-    private bool IsSearching => !string.IsNullOrWhiteSpace(SearchBox.Text);
+    private LibraryGrouping Grouping => (LibraryGrouping)Math.Max(0, GroupByCombo.SelectedIndex);
+
+    // The key and capo choices; index 0 of each combo box is "any".
+    private List<string> _filterKeys = [];
+    private List<int> _filterCapos = [];
+
+    private string? KeyFilter => KeyFilterCombo.SelectedIndex > 0 ? _filterKeys[KeyFilterCombo.SelectedIndex - 1] : null;
+
+    private int? CapoFilter => CapoFilterCombo.SelectedIndex > 0 ? _filterCapos[CapoFilterCombo.SelectedIndex - 1] : null;
+
+    // Fill the key and capo choices from the library, keeping the current choice if it's still there.
+    private void RefreshLibraryFilterChoices()
+    {
+        var (key, capo) = (KeyFilter, CapoFilter);
+        _filterKeys = SongLibrary.Keys(_library);
+        _filterCapos = SongLibrary.Capos(_library);
+
+        _updatingLibraryFilters = true;
+        KeyFilterCombo.ItemsSource = new[] { "Any key" }.Concat(_filterKeys.Select(k => $"Key: {k}")).ToList();
+        KeyFilterCombo.SelectedIndex = key is null ? 0 : _filterKeys.FindIndex(k => k.Equals(key, StringComparison.OrdinalIgnoreCase)) + 1;
+        CapoFilterCombo.ItemsSource = new[] { "Any capo" }.Concat(_filterCapos.Select(c => c == 0 ? "No capo" : $"Capo {c}")).ToList();
+        CapoFilterCombo.SelectedIndex = capo is null ? 0 : _filterCapos.IndexOf(capo.Value) + 1;
+        _updatingLibraryFilters = false;
+    }
+
+    // Searching or filtering by key or capo narrows the list, so every group starts expanded.
+    private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null;
 
     private void ApplyLibraryFilter()
     {
-        var search = SearchBox.Text?.Trim() ?? "";
-        var songs = search.Length == 0 ? _library : _library.Where(s => s.Matches(search)).ToList();
+        var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter);
         _updatingLists = true;
-        LibraryList.ItemsSource = _settings.GroupLibraryByArtist ? GroupedLibraryItems(songs) : songs;
+        LibraryList.ItemsSource = Grouping == LibraryGrouping.None ? songs : GroupedLibraryItems(songs);
         _updatingLists = false;
         SyncListSelections();
     }
 
-    // Groups start collapsed so a large library reads as a list of artists; during a search they
-    // start expanded so every match is visible.
+    // Groups start collapsed so a large library reads as a list of artists or books.
     private List<object> GroupedLibraryItems(List<SongInfo> songs)
     {
         var items = new List<object>();
-        foreach (var group in SongLibrary.GroupByArtist(songs))
+        foreach (var group in SongLibrary.Group(songs, Grouping))
         {
-            var expanded = IsArtistExpanded(group.Artist);
-            items.Add(new ArtistHeader(group.Artist, group.Songs.Count, expanded));
+            var expanded = IsGroupExpanded(group.Name);
+            items.Add(new GroupHeader(group.Name, group.Songs.Count, expanded));
             if (expanded)
                 items.AddRange(group.Songs);
         }
         return items;
     }
 
-    private bool IsArtistExpanded(string artist) =>
-        IsSearching ? !_collapsedSearchArtists.Contains(artist) : _expandedArtists.Contains(artist);
+    private bool IsGroupExpanded(string name) =>
+        IsLibraryNarrowed ? !_collapsedFilteredGroups.Contains(name) : _expandedGroups.Contains(name);
 
-    private void ToggleArtist(string artist)
+    private void ToggleGroup(string name)
     {
-        var set = IsSearching ? _collapsedSearchArtists : _expandedArtists;
-        if (!set.Remove(artist))
-            set.Add(artist);
+        var set = IsLibraryNarrowed ? _collapsedFilteredGroups : _expandedGroups;
+        if (!set.Remove(name))
+            set.Add(name);
         ApplyLibraryFilter();
     }
 
-    private string? ArtistOf(string path) =>
-        _library.Find(s => s.Path == path) is { } info ? SongLibrary.ArtistGroupName(info) : null;
-
-    // A song opened from Recent, a setlist or Finder expands its artist so it shows highlighted.
+    // A song opened from Recent, a setlist or Finder expands its group so it shows highlighted
+    // (the first of its books, when grouped by book).
     private void RevealInLibrary(string path)
     {
-        if (_settings.GroupLibraryByArtist && !IsSearching && ArtistOf(path) is { } artist && _expandedArtists.Add(artist))
+        if (Grouping == LibraryGrouping.None || IsLibraryNarrowed || _library.Find(s => s.Path == path) is not { } info)
+            return;
+        var names = SongLibrary.GroupNames(info, Grouping).ToList();
+        if (!names.Any(_expandedGroups.Contains) && _expandedGroups.Add(names[0]))
             ApplyLibraryFilter();
     }
 
@@ -1022,10 +1076,10 @@ public partial class MainWindow : Window
 
     private void OnSongListSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (!_updatingLists && sender is ListBox { SelectedItem: ArtistHeader header })
+        if (!_updatingLists && sender is ListBox { SelectedItem: GroupHeader header })
         {
             // Rebuilding the list inside its own selection event confuses the ListBox, so defer it.
-            Dispatcher.UIThread.Post(() => ToggleArtist(header.Artist));
+            Dispatcher.UIThread.Post(() => ToggleGroup(header.Name));
             return;
         }
         if (_updatingLists || sender is not ListBox { SelectedItem: SongInfo info } || info.Path == _path)
@@ -1101,7 +1155,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var loaded = Setlist.Load(path);
+            var loaded = Setlist.Load(path, _library.Select(s => s.Path));
             _setlist.Songs.Clear();
             _setlist.Songs.AddRange(loaded.Songs);
             _setlistPath = path;
@@ -1122,7 +1176,8 @@ public partial class MainWindow : Window
             Title = "Save setlist",
             SuggestedFileName = _setlistPath is null ? "Setlist" + Setlist.FileExtension : Path.GetFileName(_setlistPath),
             DefaultExtension = Setlist.FileExtension.TrimStart('.'),
-            FileTypeChoices = [SetlistFiles],
+            // Saving as .txt writes song names the way LivePrompter does.
+            FileTypeChoices = [ViewerSetlistFiles, LivePrompterSetlistFiles],
         });
         if (file?.TryGetLocalPath() is { } path)
         {

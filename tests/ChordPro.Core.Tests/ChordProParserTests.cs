@@ -80,6 +80,59 @@ public class ChordProParserTests
     }
 
     [Fact]
+    public void PlainLinesEndingInAColonStartLabelledSections()
+    {
+        var song = ChordProParser.Parse("""
+            {title: Heads}
+            Chords:
+            {chord: Dm7 base-fret 1 frets x x 0 2 1 1}
+
+            Intro:
+            [G] [D]
+
+            Verse 1:
+            [G]Words and he said: [D]this
+            And then he said:
+            Chorus:
+            {start_of_chorus}
+            [C]Sing
+            {end_of_chorus}
+            """);
+
+        // "Chords:" holds only a fingering, so it leaves no section behind. A short chordless line
+        // ending in a colon is a heading, as in LivePrompter, and is kept even with nothing under it.
+        Assert.Equal(["Intro", "Verse 1", "And then he said", "Chorus"], song.Sections.Select(s => s.Label));
+        Assert.Empty(song.Sections[2].Lines);
+        Assert.Equal(SectionKind.Chorus, song.Sections[3].Kind);
+        // A colon mid-line, or at the end of a line with chords, is still a lyric.
+        Assert.Single(song.Sections[1].Lines);
+        Assert.Single(song.ChordDefinitions);
+    }
+
+    [Fact]
+    public void ColonLinesInsideASectionStayLyrics()
+    {
+        var song = ChordProParser.Parse("""
+            {start_of_verse}
+            He said:
+            Words
+            {end_of_verse}
+            """);
+
+        var section = Assert.Single(song.Sections);
+        Assert.Equal(2, section.Lines.Count);
+    }
+
+    [Fact]
+    public void ReadsEveryBook()
+    {
+        var song = ChordProParser.Parse("{book: Camp Fire}\n{book: Christian Songs}\n{capo: 3}");
+
+        Assert.Equal(["Camp Fire", "Christian Songs"], song.GetMetaValues("book"));
+        Assert.Equal(3, song.CapoFret);
+    }
+
+    [Fact]
     public void ParsesLabelAttribute()
     {
         var song = ChordProParser.Parse("""

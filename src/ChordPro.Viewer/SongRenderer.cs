@@ -73,7 +73,7 @@ public sealed partial class SongRenderer(RenderOptions options)
     public Dictionary<(Section, int), Control> LineControls { get; } = [];
 
     /// <summary>The written capo from the file (0 if none).</summary>
-    public static int FileCapo(Song song) => int.TryParse(song.Capo, out var capo) ? Math.Clamp(capo, 0, 11) : 0;
+    public static int FileCapo(Song song) => song.CapoFret;
 
     public Control Render(Song song)
     {

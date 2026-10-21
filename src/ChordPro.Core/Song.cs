@@ -14,6 +14,9 @@ public sealed class Song
     public string? Time => GetMeta("time");
     public string? Duration => GetMeta("duration");
 
+    /// <summary>The capo fret from <c>{capo}</c>, or 0 when there is none or it isn't a number.</summary>
+    public int CapoFret => int.TryParse(Capo, out var capo) ? Math.Clamp(capo, 0, 11) : 0;
+
     /// <summary>All metadata values, keyed by canonical directive name (e.g. "title", "artist").</summary>
     public Dictionary<string, List<string>> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,6 +37,10 @@ public sealed class Song
 
     public string? GetMeta(string name) =>
         Metadata.TryGetValue(name, out var values) && values.Count > 0 ? values[0] : null;
+
+    /// <summary>Every value of a directive that may repeat, such as <c>{book}</c>.</summary>
+    public IReadOnlyList<string> GetMetaValues(string name) =>
+        Metadata.TryGetValue(name, out var values) ? values : [];
 
     internal void AddMeta(string name, string value)
     {

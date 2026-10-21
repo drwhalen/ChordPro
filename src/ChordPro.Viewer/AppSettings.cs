@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ChordPro.Core;
 using ChordPro.Core.Themes;
 
 namespace ChordPro.Viewer;
@@ -29,7 +30,14 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string? LibraryFolder { get; set; }
+    /// <summary>None, Artist or Book.</summary>
+    public string? LibraryGroupBy { get; set; }
+    /// <summary>Older on/off setting for grouping by artist, used when <see cref="LibraryGroupBy"/> isn't set.</summary>
     public bool GroupLibraryByArtist { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public LibraryGrouping Grouping => Enum.TryParse<LibraryGrouping>(LibraryGroupBy, out var grouping) ? grouping
+        : GroupLibraryByArtist ? LibraryGrouping.Artist : LibraryGrouping.None;
     public List<string> RecentFiles { get; set; } = [];
     public string? SetlistPath { get; set; }
     public List<string> SetlistSongs { get; set; } = [];
