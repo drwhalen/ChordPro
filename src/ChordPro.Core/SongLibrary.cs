@@ -21,6 +21,9 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
             System.IO.Path.GetFileName(Path).Contains(word, StringComparison.CurrentCultureIgnoreCase));
 }
 
+/// <summary>A key to filter by: <see cref="Key"/> is one spelling, <see cref="Label"/> names every spelling in the library ("C#/Db").</summary>
+public sealed record KeyChoice(string Key, string Label);
+
 /// <summary>How the library list is grouped.</summary>
 public enum LibraryGrouping { None, Artist, Book }
 
@@ -125,18 +128,62 @@ public static partial class SongLibrary
     /// </summary>
     public static List<SongInfo> Filter(IEnumerable<SongInfo> songs, string? search, string? key = null, int? capo = null) =>
         songs.Where(s => string.IsNullOrWhiteSpace(search) || s.Matches(search))
-            .Where(s => key is null || string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase))
+            .Where(s => key is null || SameKey(s.Key, key))
             .Where(s => capo is null || s.Capo == capo)
             .ToList();
 
-    /// <summary>The distinct keys in a library, in pitch order from C, each major key before its minor.</summary>
-    public static List<string> Keys(IEnumerable<SongInfo> songs) =>
-        songs.Select(s => s.Key).OfType<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(k => ChordName.TryParse(k)?.Root ?? 12)
-            .ThenBy(k => k.EndsWith('m'))
-            .ThenBy(k => k, StringComparer.Ordinal)
+    /// <summary>
+    /// The keys in a library, in pitch order from C with each major key before its minor. Spellings
+    /// of the same key (C# and Db) are one choice.
+    /// </summary>
+    public static List<KeyChoice> Keys(IEnumerable<SongInfo> songs) =>
+        songs.Select(s => s.Key?.Trim()).OfType<string>().Where(k => k.Length > 0)
+            .GroupBy(k => ParseKey(k) is var (root, minor) ? $"{root}{(minor ? "m" : "")}" : k.ToLowerInvariant())
+            .Select(g =>
+            {
+                // Sharps before flats, as the circle of fifths reaches them first going up.
+                var spellings = g.Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(k => k.Length > 1 && k[1] is 'b' or '♭').ThenBy(k => k.Length).ThenBy(k => k, StringComparer.Ordinal).ToList();
+                return (Parsed: ParseKey(spellings[0]), Choice: new KeyChoice(spellings[0], string.Join("/", spellings)));
+            })
+            .OrderBy(k => k.Parsed?.Root ?? 12)
+            .ThenBy(k => k.Parsed?.Minor ?? false)
+            .ThenBy(k => k.Choice.Label, StringComparer.Ordinal)
+            .Select(k => k.Choice)
             .ToList();
+
+    /// <summary>True when two keys are the same, however they're spelled: <c>C#</c> and <c>Db</c>, <c>Em</c> and <c>E minor</c>.</summary>
+    public static bool SameKey(string? a, string? b)
+    {
+        if (a is null || b is null)
+            return false;
+        return ParseKey(a) is { } x && ParseKey(b) is { } y ? x == y : string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The tonic's pitch class (0 = C) and whether the key is minor, or null if it isn't a key name.</summary>
+    public static (int Root, bool Minor)? ParseKey(string key)
+    {
+        var match = KeyRegex().Match(key);
+        return match.Success ? (ChordName.Note(match.Groups["root"].Value.ToUpperInvariant()[..1] + match.Groups["root"].Value[1..]), match.Groups["minor"].Success) : null;
+    }
+
+    [GeneratedRegex(@"^\s*(?<root>[A-Ga-g][#b♯♭]?)\s*(?:(?<minor>m|min|minor)|maj|major)?\s*$")]
+    private static partial Regex KeyRegex();
+
+    /// <summary>
+    /// Setlists inside a library folder: <c>.setlist</c> files anywhere, and LivePrompter setlists in
+    /// a folder named Setlists. Sorted by name.
+    /// </summary>
+    public static List<string> FindSetlists(string folder)
+    {
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        return Directory.EnumerateFiles(folder, "*", options)
+            .Where(path => Path.GetExtension(path).Equals(Setlist.FileExtension, StringComparison.OrdinalIgnoreCase) ||
+                (Path.GetFileName(Path.GetDirectoryName(path))?.Equals("Setlists", StringComparison.OrdinalIgnoreCase) == true &&
+                 Setlist.IsLivePrompterSetlist(path)))
+            .OrderBy(Path.GetFileNameWithoutExtension, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
 
     /// <summary>The distinct capo frets used in a library, lowest first (0 means no capo).</summary>
     public static List<int> Capos(IEnumerable<SongInfo> songs) => songs.Select(s => s.Capo).Distinct().Order().ToList();

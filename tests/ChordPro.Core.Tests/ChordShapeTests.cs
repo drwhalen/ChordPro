@@ -15,6 +15,8 @@ public class ChordShapeTests
     [InlineData("Dsus4", new[] { 0, 5, 7 })]
     [InlineData("A7sus4", new[] { 0, 5, 7, 10 })]
     [InlineData("Cadd9", new[] { 0, 4, 7, 14 })]
+    [InlineData("Cadd#11", new[] { 0, 4, 7, 18 })]
+    [InlineData("Dadd+11", new[] { 0, 4, 7, 18 })]
     [InlineData("E9", new[] { 0, 4, 7, 10, 14 })]
     [InlineData("Caug", new[] { 0, 4, 8 })]
     [InlineData("E5", new[] { 0, 7 })]

@@ -68,6 +68,10 @@ public partial class MainWindow : Window
     private readonly HashSet<string> _expandedGroups = new(StringComparer.CurrentCultureIgnoreCase);
     private readonly HashSet<string> _collapsedFilteredGroups = new(StringComparer.CurrentCultureIgnoreCase);
     private bool _updatingLibraryFilters;
+    private List<string> _librarySetlists = [];
+    private FileSystemWatcher? _libraryWatcher;
+    private readonly DispatcherTimer _libraryRescanTimer;
+    private LibraryCheckWindow? _checkWindow;
     private readonly Setlist _setlist = new();
     private string? _setlistPath;
     private bool _updatingLists;
@@ -86,6 +90,12 @@ public partial class MainWindow : Window
         SongScroller.AddHandler(PointerPressedEvent, OnSongPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         SongScroller.AddHandler(PointerReleasedEvent, OnSongPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
         _reloadTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => ReloadChangedFile());
+        // A converter or sync can write many files at once; rescan once they've settled.
+        _libraryRescanTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) =>
+        {
+            _libraryRescanTimer!.Stop();
+            _ = ScanLibraryAsync(quiet: true);
+        });
 
         AddHandler(DragDrop.DropEvent, OnDrop);
         // Tunnel so shortcuts work even when a list or the scroll view has focus.
@@ -147,6 +157,7 @@ public partial class MainWindow : Window
         RefreshRecentList();
         RevealInLibrary(_path);
         SyncListSelections();
+        UpdateNextSong();
     }
 
     // Auto-reload: re-read the file when another program saves it, keeping the scroll position.
@@ -688,6 +699,7 @@ public partial class MainWindow : Window
     {
         SongScroller.Background = SongPalette.FromTheme(CurrentTheme).Background;
         RenderSong();
+        UpdateNextSong();
     }
 
     private void OnThemeFlyoutOpening(object? sender, EventArgs e)
@@ -790,6 +802,7 @@ public partial class MainWindow : Window
             Sidebar.IsVisible = _settings.SidebarVisible;
         }
         RenderSong();
+        UpdateNextSong();
     }
 
     private void OnSidebarToggleClick(object? sender, RoutedEventArgs e)
@@ -948,23 +961,89 @@ public partial class MainWindow : Window
 
     private void OnRefreshLibraryClick(object? sender, RoutedEventArgs e) => _ = ScanLibraryAsync();
 
-    private async Task ScanLibraryAsync()
+    /// <param name="quiet">An automatic rescan: don't show "scanning…", and leave the list alone if nothing changed.</param>
+    private async Task ScanLibraryAsync(bool quiet = false)
     {
         if (_settings.LibraryFolder is not { } folder || !Directory.Exists(folder))
         {
+            WatchLibrary(null);
             _library = [];
+            _librarySetlists = [];
             RefreshLibraryFilterChoices();
+            RefreshLibrarySetlists();
             ApplyLibraryFilter();
             return;
         }
-        LibraryFolderText.Text = $"{folder} (scanning…)";
-        _library = await Task.Run(() => SongLibrary.Scan(folder));
+        WatchLibrary(folder);
+        if (!quiet)
+            LibraryFolderText.Text = $"{folder} (scanning…)";
+        var (library, setlists) = await Task.Run(() => (SongLibrary.Scan(folder), SongLibrary.FindSetlists(folder)));
+        if (folder != _settings.LibraryFolder)
+            return; // another folder was chosen while this one was scanning
+
+        // File events also arrive for changes that don't matter here (or none at all, on macOS).
+        if (quiet && library.SequenceEqual(_library, SongInfoComparer.Instance) && setlists.SequenceEqual(_librarySetlists))
+            return;
+        _library = library;
+        _librarySetlists = setlists;
         LibraryFolderText.Text = $"{folder} · {_library.Count} songs";
         ToolTip.SetTip(LibraryFolderText, folder);
         RefreshLibraryFilterChoices();
+        RefreshLibrarySetlists();
         ApplyLibraryFilter();
         if (_path is not null)
             RevealInLibrary(_path); // the song opened at startup may have loaded before the scan finished
+    }
+
+    // Rescan when songs are added, removed, renamed or edited, e.g. by a converter writing into the folder.
+    private void WatchLibrary(string? folder)
+    {
+        if (folder is not null && _libraryWatcher?.Path == folder)
+            return;
+        _libraryWatcher?.Dispose();
+        _libraryWatcher = null;
+        if (folder is null)
+            return;
+        try
+        {
+            _libraryWatcher = new FileSystemWatcher(folder)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+            };
+            FileSystemEventHandler changed = (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                _libraryRescanTimer.Stop();
+                _libraryRescanTimer.Start();
+            });
+            _libraryWatcher.Changed += changed;
+            _libraryWatcher.Created += changed;
+            _libraryWatcher.Deleted += changed;
+            _libraryWatcher.Renamed += (s, e) => changed(s, e);
+            _libraryWatcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or PlatformNotSupportedException)
+        {
+            _libraryWatcher = null; // Refresh still works
+        }
+    }
+
+    private async void OnCheckLibraryClick(object? sender, RoutedEventArgs e)
+    {
+        if (_library.Count == 0 && _librarySetlists.Count == 0)
+        {
+            StatusText.Text = "Choose a library folder to check";
+            return;
+        }
+        var (songs, setlists) = (_library, _librarySetlists);
+        StatusText.Text = "Checking the library…";
+        var issues = await Task.Run(() => LibraryCheck.Run(songs, setlists));
+        StatusText.Text = _path is null ? "" : Path.GetFileName(_path);
+
+        _checkWindow?.Close();
+        _checkWindow = new LibraryCheckWindow(issues, SongPalette.FromTheme(CurrentTheme), OpenPath);
+        _checkWindow.Closed += (_, _) => _checkWindow = null;
+        _checkWindow.Show(this);
     }
 
     private void OnSearchChanged(object? sender, TextChangedEventArgs e) => OnLibraryFilterChanged();
@@ -997,10 +1076,10 @@ public partial class MainWindow : Window
     private LibraryGrouping Grouping => (LibraryGrouping)Math.Max(0, GroupByCombo.SelectedIndex);
 
     // The key and capo choices; index 0 of each combo box is "any".
-    private List<string> _filterKeys = [];
+    private List<KeyChoice> _filterKeys = [];
     private List<int> _filterCapos = [];
 
-    private string? KeyFilter => KeyFilterCombo.SelectedIndex > 0 ? _filterKeys[KeyFilterCombo.SelectedIndex - 1] : null;
+    private string? KeyFilter => KeyFilterCombo.SelectedIndex > 0 ? _filterKeys[KeyFilterCombo.SelectedIndex - 1].Key : null;
 
     private int? CapoFilter => CapoFilterCombo.SelectedIndex > 0 ? _filterCapos[CapoFilterCombo.SelectedIndex - 1] : null;
 
@@ -1012,8 +1091,8 @@ public partial class MainWindow : Window
         _filterCapos = SongLibrary.Capos(_library);
 
         _updatingLibraryFilters = true;
-        KeyFilterCombo.ItemsSource = new[] { "Any key" }.Concat(_filterKeys.Select(k => $"Key: {k}")).ToList();
-        KeyFilterCombo.SelectedIndex = key is null ? 0 : _filterKeys.FindIndex(k => k.Equals(key, StringComparison.OrdinalIgnoreCase)) + 1;
+        KeyFilterCombo.ItemsSource = new[] { "Any key" }.Concat(_filterKeys.Select(k => $"Key: {k.Label}")).ToList();
+        KeyFilterCombo.SelectedIndex = key is null ? 0 : _filterKeys.FindIndex(k => SongLibrary.SameKey(k.Key, key)) + 1;
         CapoFilterCombo.ItemsSource = new[] { "Any capo" }.Concat(_filterCapos.Select(c => c == 0 ? "No capo" : $"Capo {c}")).ToList();
         CapoFilterCombo.SelectedIndex = capo is null ? 0 : _filterCapos.IndexOf(capo.Value) + 1;
         _updatingLibraryFilters = false;
@@ -1082,7 +1161,7 @@ public partial class MainWindow : Window
             Dispatcher.UIThread.Post(() => ToggleGroup(header.Name));
             return;
         }
-        if (_updatingLists || sender is not ListBox { SelectedItem: SongInfo info } || info.Path == _path)
+        if (_updatingLists || sender is not ListBox { SelectedItem: SongInfo info } || info.Path == _path || Setlist.IsDivider(info.Path))
             return;
         LoadFile(info.Path);
     }
@@ -1112,10 +1191,80 @@ public partial class MainWindow : Window
 
         _updatingLists = true;
         SetlistList.ItemsSource = _setlist.Songs
-            .Select(p => SongLibrary.ReadInfo(p) ?? new SongInfo(p, $"{Path.GetFileName(p)} (missing)", null))
+            .Select(p => Setlist.IsDivider(p) ? new SongInfo(p, $"— {Setlist.DividerName(p)} —", null)
+                : SongLibrary.ReadInfo(p) ?? new SongInfo(p, $"{Path.GetFileName(p)} (missing)", null))
             .ToList();
         _updatingLists = false;
         SyncListSelections();
+        RefreshLibrarySetlists();
+        UpdateNextSong();
+    }
+
+    // The setlists found in the library folder, with the open one selected.
+    private void RefreshLibrarySetlists()
+    {
+        _updatingLists = true;
+        LibrarySetlistsCombo.ItemsSource = _librarySetlists.Select(Path.GetFileNameWithoutExtension).ToList();
+        LibrarySetlistsCombo.SelectedIndex = _setlistPath is null ? -1 : _librarySetlists.IndexOf(_setlistPath);
+        LibrarySetlistsCombo.IsVisible = _librarySetlists.Count > 0;
+        _updatingLists = false;
+    }
+
+    private void OnLibrarySetlistChosen(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_updatingLists && LibrarySetlistsCombo.SelectedIndex is var index and >= 0 && _librarySetlists[index] != _setlistPath)
+            OpenSetlist(_librarySetlists[index]);
+    }
+
+    // The song after the open one in the setlist, skipping set dividers but saying when one is crossed.
+    private (string Path, string? Divider)? NextInSetlist()
+    {
+        var current = _path is null ? -1 : _setlist.Songs.IndexOf(_path);
+        if (current < 0)
+            return null;
+        string? divider = null;
+        for (var i = current + 1; i < _setlist.Songs.Count; i++)
+        {
+            if (Setlist.IsDivider(_setlist.Songs[i]))
+                divider = Setlist.DividerName(_setlist.Songs[i]);
+            else
+                return (_setlist.Songs[i], divider);
+        }
+        return null;
+    }
+
+    // In stage mode, show what's coming next so the key and the next chart are no surprise.
+    private void UpdateNextSong()
+    {
+        if (!_stageMode || NextInSetlist() is not var (next, divider))
+        {
+            NextSongBadge.IsVisible = false;
+            return;
+        }
+        var text = "Next: ";
+        if (divider is not null)
+            text += $"{divider} · ";
+        if (SongLibrary.ReadInfo(next) is { } info)
+        {
+            text += info.Title;
+            // The key as the song's header will show it, with this song's saved transposition.
+            if (info.Key is { } key)
+            {
+                var shift = _settings.ForSong(next).Transpose + info.Capo;
+                text += $" ({ChordTransposer.Transpose(key, shift, ChordTransposer.PrefersFlats(key, shift))})";
+            }
+        }
+        else
+        {
+            text += $"{Path.GetFileNameWithoutExtension(next)} (missing)";
+        }
+
+        var palette = SongPalette.FromTheme(CurrentTheme);
+        NextSongText.Text = text;
+        NextSongText.Foreground = palette.Text;
+        NextSongBadge.Background = palette.CommentBackground;
+        NextSongBadge.BorderBrush = palette.ChorusBar;
+        NextSongBadge.IsVisible = true;
     }
 
     // Remember the setlist between sessions, and keep its file up to date once it has one.
@@ -1160,7 +1309,7 @@ public partial class MainWindow : Window
             _setlist.Songs.AddRange(loaded.Songs);
             _setlistPath = path;
             SetlistChanged(saveFile: false);
-            if (_setlist.Songs.FirstOrDefault(File.Exists) is { } first)
+            if (_setlist.Songs.FirstOrDefault(song => !Setlist.IsDivider(song) && File.Exists(song)) is { } first)
                 LoadFile(first);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -1230,6 +1379,8 @@ public partial class MainWindow : Window
             return;
         var current = _path is null ? -1 : _setlist.Songs.IndexOf(_path);
         var next = current < 0 ? (direction > 0 ? 0 : _setlist.Songs.Count - 1) : current + direction;
+        while (next >= 0 && next < _setlist.Songs.Count && Setlist.IsDivider(_setlist.Songs[next]))
+            next += direction;
         if (next >= 0 && next < _setlist.Songs.Count)
             LoadFile(_setlist.Songs[next]);
     }
@@ -1237,9 +1388,23 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _watcher?.Dispose();
+        _libraryWatcher?.Dispose();
+        _checkWindow?.Close();
         _scroller.Stop();
         _audio?.Dispose();
         _tuner?.Close();
         base.OnClosed(e);
     }
+}
+
+/// <summary>Compares what the library list shows of a song, to tell whether a rescan changed anything.</summary>
+file sealed class SongInfoComparer : IEqualityComparer<SongInfo>
+{
+    public static SongInfoComparer Instance { get; } = new();
+
+    public bool Equals(SongInfo? x, SongInfo? y) =>
+        x is not null && y is not null && x.Path == y.Path && x.Title == y.Title && x.Artist == y.Artist &&
+        x.Key == y.Key && x.Capo == y.Capo && x.Books.SequenceEqual(y.Books);
+
+    public int GetHashCode(SongInfo obj) => obj.Path.GetHashCode();
 }

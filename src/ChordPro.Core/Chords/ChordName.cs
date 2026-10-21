@@ -85,6 +85,7 @@ public sealed partial record ChordName(int Root, int Bass, IReadOnlyList<int> In
             else if (Take("sus4") || Take("sus")) third = 5;
             else if (Take("add9") || Take("add2")) extras.Add(14);
             else if (Take("add11") || Take("add4")) extras.Add(17);
+            else if (Take("add#11") || Take("add+11")) extras.Add(18);
             else if (Take("add13") || Take("add6")) extras.Add(21);
             else if (Take("b5") || Take("-5")) fifth = 6;
             else if (Take("#5") || Take("+5")) fifth = 8;

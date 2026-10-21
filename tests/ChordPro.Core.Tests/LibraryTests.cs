@@ -123,16 +123,87 @@ public sealed class LibraryTests : IDisposable
     }
 
     [Fact]
-    public void ListsKeysInPitchOrderAndCapos()
+    public void ListsKeysInPitchOrderMergingSpellingsOfTheSameKey()
     {
         SongInfo[] songs =
         [
             new("/a", "", null, "G"), new("/b", "", null, "Em"), new("/c", "", null, "C"),
             new("/d", "", null, "E", Capo: 3), new("/e", "", null, "Db"), new("/f", "", null, "g"),
+            new("/g", "", null, "C#"), new("/h", "", null, "E minor"), new("/i", "", null, "Dorian"),
         ];
 
-        Assert.Equal(["C", "Db", "E", "Em", "G"], SongLibrary.Keys(songs));
+        Assert.Equal(["C", "C#/Db", "E", "Em/E minor", "G", "Dorian"], SongLibrary.Keys(songs).Select(k => k.Label));
         Assert.Equal([0, 3], SongLibrary.Capos(songs));
+    }
+
+    [Theory]
+    [InlineData("C#", "Db", true)]
+    [InlineData("Em", "E minor", true)]
+    [InlineData("E", "Em", false)]
+    [InlineData("A#m", "bbm", true)]
+    [InlineData("Dorian", "dorian", true)]
+    [InlineData("G", null, false)]
+    public void ComparesKeysHoweverTheyAreSpelled(string a, string? b, bool expected) =>
+        Assert.Equal(expected, SongLibrary.SameKey(a, b));
+
+    [Fact]
+    public void FiltersByKeyAcrossSpellings()
+    {
+        SongInfo[] songs = [new("/a", "One", null, "C#"), new("/b", "Two", null, "Db"), new("/c", "Three", null, "D")];
+
+        Assert.Equal(["One", "Two"], SongLibrary.Filter(songs, null, "Db").Select(s => s.Title));
+    }
+
+    [Fact]
+    public void FindsSetlistsInTheLibrary()
+    {
+        var setlists = Directory.CreateDirectory(Path.Combine(_folder, "Setlists")).FullName;
+        File.WriteAllText(Path.Combine(setlists, "Gig.txt"), "Some Song - Someone (G)");
+        File.WriteAllText(Path.Combine(setlists, "song.txt"), "{title: Not a setlist}");
+        File.WriteAllText(Path.Combine(_folder, "notes.txt"), "Not in a Setlists folder");
+        File.WriteAllText(Path.Combine(_folder, "Friday.setlist"), "a.cho");
+
+        Assert.Equal(["Friday.setlist", "Gig.txt"], SongLibrary.FindSetlists(_folder).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void ChecksSongsForCommonMistakes()
+    {
+        var song = ChordProParser.Parse("""
+            {title: T}
+            {key: G}
+            {chord: Fmaj7 base-fret 1 frets x x 3 2 1 0}
+            Verse 1:
+            Intro:
+            [G]Words [*x2] [N.C.] [Dsus4]more [F#m7b5]
+            """);
+
+        Assert.Equal(
+            [
+                "File name says key A but {key:} is G",
+                "Heading “Verse 1” has nothing under it",
+                "[*x2] isn't a chord name",
+                "Fingering for Fmaj7 is never used (the name must match the chord as written)",
+            ],
+            LibraryCheck.CheckSong("/x/T - Someone (A).txt", song));
+        Assert.Equal(["No {key:}"], LibraryCheck.CheckSong("/x/U.txt", ChordProParser.Parse("[C]la")));
+        Assert.Equal(["{title:} is “Pink Floyd”, which the file name gives as the artist — title and artist look swapped"],
+            LibraryCheck.CheckSong("/x/Pigs On The Wing - Pink Floyd (G).txt", ChordProParser.Parse("{title: Pink Floyd}\n{key: G}")));
+        Assert.Empty(LibraryCheck.CheckSong("/x/Pigs On The Wing - Pink Floyd (G).txt", ChordProParser.Parse("{title: Pigs On The Wing}\n{key: G}")));
+    }
+
+    [Fact]
+    public void ChecksSetlistsForSongsThatAreMissing()
+    {
+        var setlists = Directory.CreateDirectory(Path.Combine(_folder, "Setlists")).FullName;
+        var song = Path.Combine(_folder, "Here - Someone (G).txt");
+        File.WriteAllText(song, "{title: Here}\n{key: G}");
+        var setlist = Path.Combine(setlists, "Gig.txt");
+        File.WriteAllLines(setlist, ["--- Set 1 ---", "Here - Someone (G)", "Gone - Nobody (C)"]);
+
+        var issues = LibraryCheck.Run(SongLibrary.Scan(_folder), [setlist]);
+
+        Assert.Equal([("Gig", "Setlist line “Gone - Nobody (C)” matches no song")], issues.Select(i => (i.Name, i.Problem)));
     }
 
     [Fact]
@@ -181,19 +252,21 @@ public sealed class LibraryTests : IDisposable
         foreach (var song in new[] { amazing, tambourine, elsewhere })
             File.WriteAllText(song, "{title: x}");
         var file = Path.Combine(setlists, "Gig.txt");
-        File.WriteAllLines(file, ["Amazing Grace - John Newton (G)", "Mr. Tambourine Man - Bob Dylan (D)",
-            "Badge - Cream (Am)", "Gone - Nobody (C)"]);
+        File.WriteAllLines(file, ["Amazing Grace - John Newton (G).txt", "Mr. Tambourine Man - Bob Dylan (D)",
+            "--- Set 2 ---", "Badge - Cream (Am)", "Gone - Nobody (C)"]);
 
         Assert.True(Setlist.IsLivePrompterSetlist(file));
         Assert.False(Setlist.IsLivePrompterSetlist(amazing));
         var setlist = Setlist.Load(file, [elsewhere]);
 
-        Assert.Equal([amazing, tambourine, elsewhere, Path.Combine(_folder, "Gone - Nobody (C).txt")], setlist.Songs);
+        Assert.Equal([amazing, tambourine, "--- Set 2 ---", elsewhere, Path.Combine(_folder, "Gone - Nobody (C).txt")], setlist.Songs);
+        Assert.True(Setlist.IsDivider(setlist.Songs[2]));
+        Assert.Equal("Set 2", Setlist.DividerName(setlist.Songs[2]));
 
         // Saving keeps LivePrompter's format, including the song that wasn't found.
         setlist.Save(file);
         Assert.Equal(["Amazing Grace - John Newton (G)", "Mr. Tambourine Man - Bob Dylan (D)",
-            "Badge - Cream (Am)", "Gone - Nobody (C)"], File.ReadAllLines(file));
+            "--- Set 2 ---", "Badge - Cream (Am)", "Gone - Nobody (C)"], File.ReadAllLines(file));
     }
 
     [Fact]

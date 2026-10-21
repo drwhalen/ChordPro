@@ -147,6 +147,8 @@
                             <WrapPanel Classes="buttons">
                                 <Button Content="Choose folder…" Click="OnChooseFolderClick" />
                                 <Button Content="Refresh" Click="OnRefreshLibraryClick" />
+                                <Button Content="Check…" Click="OnCheckLibraryClick"
+                                        ToolTip.Tip="Look for problems in the songs and setlists: empty headings, wrong keys, misspelled chords, missing songs" />
                             </WrapPanel>
                             <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="CharacterEllipsis" />
                             <TextBox x:Name="SearchBox" Watermark="Search title, artist…" TextChanged="OnSearchChanged" />
@@ -173,6 +175,8 @@
                 <TabItem Header="Setlist" FontSize="15">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                            <ComboBox x:Name="LibrarySetlistsCombo" PlaceholderText="Setlists in your library…" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnLibrarySetlistChosen" />
                             <TextBlock x:Name="SetlistNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                             <WrapPanel Classes="buttons">
                                 <Button Content="New" Click="OnNewSetlistClick" />
@@ -207,6 +211,12 @@
             <!-- Marks where the line being played is kept while scrolling follows the song. -->
             <Border x:Name="ReadingMarker" IsVisible="False" IsHitTestVisible="False"
                     HorizontalAlignment="Left" VerticalAlignment="Top" Width="6" CornerRadius="3" Margin="12,0,0,0" />
+            <!-- In stage mode, the next song in the setlist. -->
+            <Border x:Name="NextSongBadge" IsVisible="False" IsHitTestVisible="False"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,16"
+                    Padding="14,8" CornerRadius="8" BorderThickness="1">
+                <TextBlock x:Name="NextSongText" FontSize="18" />
+            </Border>
         </Panel>
     </DockPanel>
 </Window>
