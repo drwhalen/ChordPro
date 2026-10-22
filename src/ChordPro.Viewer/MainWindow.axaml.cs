@@ -59,6 +59,16 @@ public partial class MainWindow : Window
     private TapTempo _tapTempo = new();
     private readonly Stopwatch _tapClock = Stopwatch.StartNew();
     private AudioFollower? _audio;
+    // Following the voice: the listener, where the lyrics place the player, and when that was heard.
+    private VoiceFollower? _voice;
+    private LyricAligner? _aligner;
+    private (double Time, DateTime At)? _voiceTarget;
+    private string? _lastHeard;
+    private int _unmatched;
+    private bool _downloadingModel;
+
+    /// <summary>Makes the voice listener instead of opening the microphone (for testing with recordings).</summary>
+    public Func<VoiceFollower?>? CreateVoiceFollower { get; set; }
     private DateTime _lastStatusUpdate;
     private Point? _pressPosition;
     private bool _updatingScrollMode;
@@ -89,6 +99,7 @@ public partial class MainWindow : Window
         _scroller = new SmartScroller(SongScroller) { TimelineFactory = BuildTimeline, PageTarget = PageTarget };
         _scroller.RunningChanged += (_, _) => OnScrollRunningChanged();
         _scroller.Progressed += (_, _) => UpdateScrollStatus();
+        _scroller.ScrolledByHand += OnScrolledByHand;
         // Tap the top or bottom of the song to turn pages in manual mode.
         SongScroller.AddHandler(PointerPressedEvent, OnSongPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         SongScroller.AddHandler(PointerReleasedEvent, OnSongPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -464,7 +475,123 @@ public partial class MainWindow : Window
                 return;
             }
         }
+        if (_scrollMode == ScrollMode.FollowVoice && _voice is null && !StartVoice())
+            return;
         _scroller.Start();
+        if (_scrollMode == ScrollMode.FollowVoice)
+            OnScrolledByHand(_scroller.Time); // pick up the lyrics from where the view is
+    }
+
+    // Opens the microphone and speech recognition; the first time, downloads the model instead.
+    private bool StartVoice()
+    {
+        if (!SpeechModel.IsDownloaded)
+        {
+            _ = DownloadSpeechModelAsync();
+            UpdateScrollControls();
+            return false;
+        }
+        StatusText.Text = "Loading speech recognition…";
+        string? error = "no listener";
+        _voice = CreateVoiceFollower is { } create ? create() : VoiceFollower.TryStart(SpeechModel.FilePath, out error);
+        if (_voice is null)
+        {
+            StatusText.Text = $"Can't follow your voice: {error}";
+            UpdateScrollControls();
+            return false;
+        }
+        _aligner = new LyricAligner(_song!);
+        (_voiceTarget, _lastHeard, _unmatched) = (null, null, 0);
+        var voice = _voice;
+        voice.Heard += (text, at) => Dispatcher.UIThread.Post(() =>
+        {
+            if (_voice == voice)
+                OnVoiceHeard(text, at);
+        });
+        return true;
+    }
+
+    private async Task DownloadSpeechModelAsync()
+    {
+        if (_downloadingModel)
+            return;
+        _downloadingModel = true;
+        UpdateScrollControls();
+        try
+        {
+            var progress = new Progress<double>(p =>
+                StatusText.Text = $"Downloading the speech model, {p:P0} of {SpeechModel.ApproximateBytes / 1e6:0} MB (one time only)…");
+            await SpeechModel.DownloadAsync(progress);
+            StatusText.Text = "Speech model ready. Press Listen and start singing.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
+        {
+            StatusText.Text = $"Couldn't download the speech model: {ex.Message}";
+        }
+        finally
+        {
+            _downloadingModel = false;
+            UpdateScrollControls();
+        }
+    }
+
+    // Place the player by the words heard; after several stretches that match nothing (a long
+    // instrumental, or a jump to another part), look for them in the whole song again.
+    private void OnVoiceHeard(string text, DateTime at)
+    {
+        if (_aligner is null || _musical is null || !_scroller.IsRunning)
+            return;
+        _lastHeard = text;
+        // The time lets the aligner work out the singer's pace, which is what places them in repeated lines.
+        if (_aligner.Hear(text, (at - DateTime.UnixEpoch).TotalSeconds) is { } line &&
+            TimelineTime(line.Section, line.LineIndex, _aligner.CurrentFraction) is { } time)
+        {
+            _voiceTarget = (time, at);
+            _unmatched = 0;
+        }
+        else if (++_unmatched >= 6)
+        {
+            _aligner.Reset();
+            _unmatched = 0;
+        }
+        UpdateScrollStatus(force: true);
+    }
+
+    // Scrolled by hand (or just started): follow the lyrics from the line now in view.
+    private void OnScrolledByHand(double time)
+    {
+        if (_aligner is null || _musical is null)
+            return;
+        _voiceTarget = null;
+        if (time <= 0)
+            _aligner.Reset();
+        else if (_musical.LineAt((time + 60 / _musical.Tempo) / _musical.SecondsPerBar) is { } line)
+            _aligner.MoveTo(line.Section, line.LineIndex);
+    }
+
+    // When a lyric line, or a point through it, reaches the reading position on the musical timeline
+    // (as ScrollTimelineBuilder.Musical places lines: a beat early).
+    private double? TimelineTime(Section section, int lineIndex, double fraction)
+    {
+        if (_musical?.Lines.FirstOrDefault(l => l.Section == section && l.LineIndex == lineIndex) is not { } line)
+            return null;
+        return Math.Max(0, (line.Start + fraction * line.Length) * _musical.SecondsPerBar - 60 / _musical.Tempo);
+    }
+
+    // Where the singing has got to, moved on by the time since it was heard.
+    private double? VoiceTargetTime() =>
+        _voiceTarget is { } heard ? heard.Time + (DateTime.UtcNow - heard.At).TotalSeconds * _scroller.Rate : null;
+
+    // Never past the next lyric line not yet heard: wait with it at the reading position (half a
+    // beat in, so it's fully there) through a pause or an instrumental.
+    private double? VoiceMaxTime()
+    {
+        if (_aligner is null || _aligner.Lines.Count == 0)
+            return null;
+        var next = _aligner.CurrentLine is { } current ? _aligner.Lines.ToList().IndexOf(current) + 1 : 0;
+        return next < _aligner.Lines.Count && TimelineTime(_aligner.Lines[next].Section, _aligner.Lines[next].LineIndex, 0) is { } start
+            ? start + 30 / _musical!.Tempo
+            : null;
     }
 
     private void OnScrollRunningChanged()
@@ -473,6 +600,10 @@ public partial class MainWindow : Window
         {
             _audio?.Dispose();
             _audio = null;
+            // Freeing the model waits for a transcription in progress, so do it off the UI thread.
+            if (_voice is { } voice)
+                _ = Task.Run(voice.Dispose);
+            (_voice, _aligner, _voiceTarget, _lastHeard) = (null, null, null, null);
         }
         UpdateScrollControls();
         UpdateScrollStatus(force: true);
@@ -490,7 +621,7 @@ public partial class MainWindow : Window
         return _scrollMode switch
         {
             ScrollMode.Timed => builder.Timed(),
-            ScrollMode.Musical or ScrollMode.FollowAudio => builder.Musical(_musical),
+            ScrollMode.Musical or ScrollMode.FollowAudio or ScrollMode.FollowVoice => builder.Musical(_musical),
             _ => null,
         };
     }
@@ -502,6 +633,8 @@ public partial class MainWindow : Window
         var writtenTempo = _musical?.Tempo ?? MusicalTimeline.DefaultTempo;
         _scroller.Rate = _scrollMode == ScrollMode.Timed ? _speed : CurrentTempo / writtenTempo;
         _scroller.LiveRate = _scrollMode == ScrollMode.FollowAudio ? FollowRate : null;
+        _scroller.TargetTime = _scrollMode == ScrollMode.FollowVoice ? VoiceTargetTime : null;
+        _scroller.MaxTime = _scrollMode == ScrollMode.FollowVoice ? VoiceMaxTime : null;
         if (_audio is not null)
             _audio.ExpectedTempo = CurrentTempo;
     }
@@ -598,7 +731,13 @@ public partial class MainWindow : Window
         ScrollToggle.IsVisible = SlowerButton.IsVisible = SpeedText.IsVisible = FasterButton.IsVisible = !manual;
         TapTempoButton.IsVisible = !manual && !timed;
         ScrollToggle.IsChecked = _scroller.IsRunning;
-        ScrollToggle.Content = _scroller.IsRunning ? "❚❚ Scroll" : _scrollMode == ScrollMode.FollowAudio ? "▶ Listen" : "▶ Scroll";
+        ScrollToggle.Content = _scroller.IsRunning ? "❚❚ Scroll"
+            : _scrollMode == ScrollMode.FollowVoice && !SpeechModel.IsDownloaded ? (_downloadingModel ? "Downloading…" : "⬇ Get voice model")
+            : _scrollMode is ScrollMode.FollowAudio or ScrollMode.FollowVoice ? "▶ Listen" : "▶ Scroll";
+        ScrollToggle.IsEnabled = !_downloadingModel;
+        ToolTip.SetTip(ScrollToggle, _scrollMode == ScrollMode.FollowVoice && !SpeechModel.IsDownloaded
+            ? $"Following your voice needs a one-time download of the speech model ({SpeechModel.ApproximateBytes / 1e6:0} MB). After that it works offline."
+            : "Start or stop (Space)");
 
         SpeedText.Text = timed ? $"{_speed:0.0}×" : $"{CurrentTempo:0} BPM";
         ToolTip.SetTip(SlowerButton, timed ? "Scroll slower" : "Lower tempo");
@@ -639,6 +778,8 @@ public partial class MainWindow : Window
             ScrollMode.Musical => BarStatus(),
             ScrollMode.FollowAudio when _audio is { IsPlaying: false } => $"Waiting for you to play…  ·  {BarStatus()}",
             ScrollMode.FollowAudio => $"Hearing {(_audio?.Tempo is { } heard ? $"{heard:0} BPM" : "you")}  ·  {BarStatus()}",
+            ScrollMode.FollowVoice when _lastHeard is null => $"Listening for you to sing…  ·  {BarStatus()}",
+            ScrollMode.FollowVoice => $"Heard “{(_lastHeard.Length > 40 ? "…" + _lastHeard[^40..].TrimStart() : _lastHeard)}”  ·  {BarStatus()}",
             _ => Path.GetFileName(_path),
         };
     }
@@ -1477,6 +1618,7 @@ public partial class MainWindow : Window
         _checkWindow?.Close();
         _scroller.Stop();
         _audio?.Dispose();
+        _voice?.Dispose();
         _tuner?.Close();
         base.OnClosed(e);
     }

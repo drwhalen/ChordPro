@@ -100,6 +100,7 @@
                         <ComboBoxItem Content="Timed" ToolTip.Tip="Paced by {duration} or {x_time} markers" />
                         <ComboBoxItem Content="Musical" ToolTip.Tip="Paced by tempo and bars, line by line" />
                         <ComboBoxItem Content="Follow audio (beta)" ToolTip.Tip="Listens to you play and follows your tempo (experimental)" />
+                        <ComboBoxItem Content="Follow voice (beta)" ToolTip.Tip="Listens to you sing and keeps your place by the lyrics (experimental; recognition runs on this computer)" />
                     </ComboBox>
                     <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Start or stop (Space)" />
                     <Button x:Name="SlowerButton" Content="−" Click="OnScrollSlowerClick" />

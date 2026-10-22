@@ -15,6 +15,8 @@ public enum ScrollMode
     Musical,
     /// <summary>The musical timeline, driven by the tempo heard through the microphone (experimental).</summary>
     FollowAudio,
+    /// <summary>The musical timeline, kept in place by the lyrics heard being sung (experimental).</summary>
+    FollowVoice,
 }
 
 /// <summary>
@@ -53,6 +55,15 @@ public sealed class SmartScroller
 
     /// <summary>A rate that changes while playing (following audio); 0 holds the view still.</summary>
     public Func<double>? LiveRate { get; set; }
+
+    /// <summary>Where on the timeline the player is known to be (following lyrics); the view eases there.</summary>
+    public Func<double?>? TargetTime { get; set; }
+
+    /// <summary>The furthest the timeline may run ahead (to the next line not yet heard).</summary>
+    public Func<double?>? MaxTime { get; set; }
+
+    /// <summary>Raised when the view is scrolled by hand while running, with the new time.</summary>
+    public event Action<double>? ScrolledByHand;
 
     /// <summary>
     /// Where a page turn (+1 down, -1 up) should move the view, given the current offset and view
@@ -156,9 +167,17 @@ public sealed class SmartScroller
 
         // Scrolled by hand: carry on from there.
         if (Math.Abs(_scroller.Offset.Y - _lastOffset) > 2)
+        {
             Time = _timeline.TimeAt(_scroller.Offset.Y);
+            ScrolledByHand?.Invoke(Time);
+        }
 
         Time += elapsed * (LiveRate?.Invoke() ?? Rate);
+        // Ease towards a known position over about a third of a second, rather than jumping.
+        if (TargetTime?.Invoke() is { } target && Math.Abs(target - Time) > 0.2)
+            Time += (target - Time) * Math.Min(1, elapsed * 3);
+        if (MaxTime?.Invoke() is { } max && Time > max)
+            Time = Math.Max(max, Time - elapsed * (LiveRate?.Invoke() ?? Rate));
         SetOffset(_timeline.OffsetAt(Time));
         Progressed?.Invoke(this, EventArgs.Empty);
 

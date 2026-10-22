@@ -30,7 +30,7 @@
     <key>NSHumanReadableCopyright</key>
     <string>ChordPro Viewer</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>ChordPro Viewer listens to your instrument for the tuner and for Follow audio scrolling.</string>
+    <string>ChordPro Viewer listens to your instrument for the tuner and Follow audio scrolling, and to your singing for Follow voice scrolling. Singing is recognized on this Mac and never sent anywhere.</string>
 
     <!-- Open ChordPro songs and setlists from Finder. -->
     <key>CFBundleDocumentTypes</key>

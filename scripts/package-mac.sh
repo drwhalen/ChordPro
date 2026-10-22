@@ -28,6 +28,8 @@ dotnet publish $project -c Release -r osx-$arch --self-contained -p:PublishReady
 # Bundle layout: Contents/{Info.plist, MacOS/<everything published>, Resources/AppIcon.icns}
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp -R $publish/. "$app/Contents/MacOS/"
+# Whisper.net ships native libraries for every platform; keep only this Mac's.
+find "$app/Contents/MacOS/runtimes" -mindepth 1 -maxdepth 1 -type d ! -name "macos-$arch" -exec rm -rf {} + 2>/dev/null || true
 sed "s/__VERSION__/$version/g" $root/packaging/macos/Info.plist > "$app/Contents/Info.plist"
 plutil -lint "$app/Contents/Info.plist" >/dev/null
 

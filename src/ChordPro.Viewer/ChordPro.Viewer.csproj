@@ -21,6 +21,8 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.20" />
     <PackageReference Include="PortAudioSharp2" Version="1.0.6" />
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>
 
   <ItemGroup>
