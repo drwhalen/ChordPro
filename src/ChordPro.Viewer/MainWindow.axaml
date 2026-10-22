@@ -131,6 +131,8 @@
                                     <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
                                     <RadioButton x:Name="GuitarRadio" GroupName="Instrument" Content="Guitar" IsCheckedChanged="OnViewOptionChanged" />
                                     <RadioButton x:Name="UkuleleRadio" GroupName="Instrument" Content="Ukulele" IsCheckedChanged="OnViewOptionChanged" />
+                                    <RadioButton x:Name="MerlinRadio" GroupName="Instrument" Content="Seagull Merlin (D-A-DD)" IsCheckedChanged="OnViewOptionChanged"
+                                                 ToolTip.Tip="Three courses tuned D-A-D (the melody pair fretted together), diatonic frets with 6+" />
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>

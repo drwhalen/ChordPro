@@ -97,4 +97,36 @@ public class ChordShapeTests
     [Fact]
     public void ParsesSpaceSeparatedFretsWithTwoDigits() =>
         Assert.Equal(new[] { -1, 10, 12, 12, 11, 10 }, ChordShape.Parse("x 10 12 12 11 10").Frets);
+
+    [Theory]
+    [InlineData("D", "0-0-2")]
+    [InlineData("G", "0-1-3")]
+    [InlineData("Em", "1-1-3")]
+    [InlineData("Bm", "0-1-2")]
+    [InlineData("D7", "0-5-6")]
+    [InlineData("A", "1-2-4")]
+    public void FindsMerlinShapesOnItsDiatonicFrets(string chord, string tab) =>
+        Assert.Equal(tab, Instrument.Merlin.Notation(ChordShapeFinder.Find(chord, Instrument.Merlin)!));
+
+    [Fact]
+    public void NamesTheMerlinsSixAndAHalfFret()
+    {
+        // Fret 7 as laid out is the 6+ fret, a semitone below the octave: G# on the A string, for E7.
+        var shape = ChordShapeFinder.Find("E7", Instrument.Merlin)!;
+        Assert.Equal("7-6+-8", Instrument.Merlin.Notation(shape));
+        Assert.Equal(11, Instrument.Merlin.Semitones(7));
+    }
+
+    [Fact]
+    public void PlaysRootAndFifthWhereTheMerlinHasNoThird()
+    {
+        // No G# within reach for E major: E5, as Merlin players play it.
+        Assert.Equal("1-1-1", Instrument.Merlin.Notation(ChordShapeFinder.Find("E", Instrument.Merlin)!));
+        // No F or Bb anywhere on a D-A-D diatonic neck.
+        Assert.Null(ChordShapeFinder.Find("F", Instrument.Merlin));
+    }
+
+    [Fact]
+    public void SuggestsNoCapoOnADiatonicNeck() =>
+        Assert.Equal([0], CapoSuggester.Suggest([("G", 2), ("D", 2)], Instrument.Merlin).Select(s => s.Capo));
 }

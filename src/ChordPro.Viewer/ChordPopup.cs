@@ -15,6 +15,7 @@ public sealed class ChordPopup : UserControl
     private readonly IReadOnlyList<(ChordShape Shape, string? Source)> _shapes;
     private readonly double _fontSize;
     private readonly SongPalette _palette;
+    private readonly Instrument _instrument;
     private readonly Border _diagramHost = new();
     private readonly TextBlock _caption = new() { HorizontalAlignment = HorizontalAlignment.Center, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _frets = new() { HorizontalAlignment = HorizontalAlignment.Center, Opacity = 0.7, FontSize = 12 };
@@ -24,8 +25,10 @@ public sealed class ChordPopup : UserControl
     private int _index;
 
     /// <param name="shapes">Fingerings to show, best first; <c>Source</c> labels where one came from (e.g. "From the song").</param>
-    public ChordPopup(string name, IReadOnlyList<(ChordShape Shape, string? Source)> shapes, double fontSize, SongPalette palette)
+    public ChordPopup(string name, IReadOnlyList<(ChordShape Shape, string? Source)> shapes, double fontSize, SongPalette palette,
+        Instrument? instrument = null)
     {
+        _instrument = instrument ?? Instrument.Guitar;
         _name = name;
         _shapes = shapes;
         _fontSize = fontSize;
@@ -49,7 +52,13 @@ public sealed class ChordPopup : UserControl
         _diagramHost.HorizontalAlignment = HorizontalAlignment.Center;
 
         Content = shapes.Count == 0
-            ? new TextBlock { Text = $"No fingering found for {name}.", Margin = new Thickness(4) }
+            ? new TextBlock
+            {
+                Text = _instrument.IsDiatonic
+                    ? $"{name} isn't on the {_instrument.Name}'s frets."
+                    : $"No fingering found for {name}.",
+                Margin = new Thickness(4),
+            }
             : new StackPanel { MinWidth = 190, Spacing = 4, Children = { _diagramHost, _caption, _frets, pager } };
 
         if (shapes.Count > 0)
@@ -61,22 +70,22 @@ public sealed class ChordPopup : UserControl
         _index = (index + _shapes.Count) % _shapes.Count;
         var (shape, source) = _shapes[_index];
 
-        _diagramHost.Child = new ChordDiagram(_name, shape, _fontSize * DiagramScale)
+        _diagramHost.Child = new ChordDiagram(_name, shape, _fontSize * DiagramScale, _instrument)
         {
             Foreground = _palette.Text,
             Accent = _palette.Chord,
         };
         _caption.Text = source ?? Describe(shape);
-        _frets.Text = shape.ToString();
+        _frets.Text = _instrument.Notation(shape);
         _counter.Text = $"{_index + 1} of {_shapes.Count}";
         _previous.IsEnabled = _next.IsEnabled = _shapes.Count > 1;
     }
 
-    private static string Describe(ChordShape shape)
+    private string Describe(ChordShape shape)
     {
         var position = shape.BaseFret == 1
             ? (shape.Frets.Contains(0) ? "Open position" : "First position")
-            : $"Fret {shape.BaseFret}";
+            : $"Fret {_instrument.FretName(shape.BaseFret)}";
         return ChordDifficulty.NeedsBarre(shape) ? $"{position} · barre" : position;
     }
 }

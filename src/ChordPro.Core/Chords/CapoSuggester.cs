@@ -18,7 +18,9 @@ public static class CapoSuggester
         IReadOnlyList<(string Chord, int Count)> soundingChords, Instrument instrument, string? soundingKey = null)
     {
         var suggestions = new List<CapoSuggestion>();
-        for (var capo = 0; capo <= MaxCapo; capo++)
+        // On a diatonic neck a capo changes the mode as well as the key, so the shapes don't simply
+        // move down: only playing without one is suggested.
+        for (var capo = 0; capo <= (instrument.IsDiatonic ? 0 : MaxCapo); capo++)
         {
             var preferFlats = ChordTransposer.PrefersFlats(soundingKey, -capo);
             var shapes = soundingChords.Select(c => (Name: ChordTransposer.Transpose(c.Chord, -capo, preferFlats), c.Count)).ToList();

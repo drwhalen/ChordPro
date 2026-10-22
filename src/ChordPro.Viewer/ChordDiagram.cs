@@ -19,16 +19,19 @@ public sealed class ChordDiagram : Control
 
     private readonly string _name;
     private readonly ChordShape _shape;
+    private readonly Instrument _instrument;
     private readonly double _scale;
 
     static ChordDiagram() => AffectsRender<ChordDiagram>(ForegroundProperty, AccentProperty);
 
-    public ChordDiagram(string name, ChordShape shape, double fontSize)
+    /// <param name="instrument">Names the frets (the Merlin's "6+") and marks paired strings; guitar if not given.</param>
+    public ChordDiagram(string name, ChordShape shape, double fontSize, Instrument? instrument = null)
     {
         _name = name;
         _shape = shape;
+        _instrument = instrument ?? Instrument.Guitar;
         _scale = fontSize / 16;
-        ToolTip.SetTip(this, $"{name}: {shape}");
+        ToolTip.SetTip(this, $"{name}: {_instrument.Notation(shape)}");
     }
 
     public IBrush? Foreground { get => GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
@@ -39,6 +42,8 @@ public sealed class ChordDiagram : Control
     private double NameHeight => 20 * _scale;
     private double MarkerHeight => 12 * _scale;
     private double SideMargin => 16 * _scale;
+    // Room on the left for the starting fret's number ("12", "6+") clear of the dots.
+    private double LeftMargin => (_shape.BaseFret == 1 ? 16 : 24) * _scale;
 
     private int FretCount
     {
@@ -50,7 +55,7 @@ public sealed class ChordDiagram : Control
     }
 
     protected override Size MeasureOverride(Size availableSize) => new(
-        SideMargin * 2 + StringSpacing * (_shape.Frets.Count - 1),
+        LeftMargin + SideMargin + StringSpacing * (_shape.Frets.Count - 1),
         NameHeight + MarkerHeight + FretSpacing * FretCount + 4 * _scale);
 
     public override void Render(DrawingContext context)
@@ -58,7 +63,7 @@ public sealed class ChordDiagram : Control
         var foreground = Foreground ?? Brushes.Black;
         var accent = Accent ?? foreground;
         var strings = _shape.Frets.Count;
-        var left = SideMargin;
+        var left = LeftMargin;
         var top = NameHeight + MarkerHeight;
         var width = StringSpacing * (strings - 1);
         var height = FretSpacing * FretCount;
@@ -73,14 +78,25 @@ public sealed class ChordDiagram : Control
             context.DrawLine(new Pen(foreground, 3 * _scale), new Point(left, top), new Point(left + width, top));
         else
         {
-            var label = Format(baseFret.ToString(CultureInfo.InvariantCulture), 10 * _scale, foreground);
-            context.DrawText(label, new Point(left - label.Width - 4 * _scale, top + FretSpacing / 2 - label.Height / 2));
+            var label = Format(_instrument.FretName(baseFret), 10 * _scale, foreground);
+            context.DrawText(label, new Point(left - StringSpacing * 0.38 - label.Width - 3 * _scale, top + FretSpacing / 2 - label.Height / 2));
         }
 
         for (var fret = 0; fret <= FretCount; fret++)
             context.DrawLine(thin, new Point(left, top + fret * FretSpacing), new Point(left + width, top + fret * FretSpacing));
         for (var s = 0; s < strings; s++)
-            context.DrawLine(thin, new Point(left + s * StringSpacing, top), new Point(left + s * StringSpacing, top + height));
+        {
+            var x = left + s * StringSpacing;
+            if (_instrument.DoubledStrings.Contains(s) && _instrument.StringCount == strings)
+            {
+                // A pair of strings played as one (the Merlin's melody strings): two close lines.
+                var gap = Math.Max(1.5, StringSpacing * 0.12);
+                context.DrawLine(thin, new Point(x - gap, top), new Point(x - gap, top + height));
+                context.DrawLine(thin, new Point(x + gap, top), new Point(x + gap, top + height));
+            }
+            else
+                context.DrawLine(thin, new Point(x, top), new Point(x, top + height));
+        }
 
         var dotRadius = StringSpacing * 0.38;
         for (var s = 0; s < strings; s++)

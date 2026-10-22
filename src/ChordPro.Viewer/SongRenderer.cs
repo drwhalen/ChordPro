@@ -162,7 +162,7 @@ public sealed partial class SongRenderer(RenderOptions options)
             if (shape is null)
                 continue;
 
-            var diagram = new ChordDiagram(name, shape, FontSize)
+            var diagram = new ChordDiagram(name, shape, FontSize, options.Instrument)
             {
                 Margin = new Thickness(0, 0, FontSize * 0.5, FontSize * 0.5),
                 Foreground = Palette.Text,

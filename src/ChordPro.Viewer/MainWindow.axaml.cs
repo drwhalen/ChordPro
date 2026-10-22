@@ -414,7 +414,7 @@ public partial class MainWindow : Window
 
         // One popup at a time: tapping another chord replaces it.
         _chordFlyout.Hide();
-        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _fontSize, SongPalette.FromTheme(CurrentTheme));
+        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _fontSize, SongPalette.FromTheme(CurrentTheme), CurrentInstrument);
         _chordFlyout.ShowAt(tap.Anchor);
     }
 
@@ -912,8 +912,9 @@ public partial class MainWindow : Window
         ShowDiagramsCheck.IsChecked = _settings.ShowDiagrams;
         SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
         KeyIncludesCapoCheck.IsChecked = _settings.KeyIncludesCapo;
-        GuitarRadio.IsChecked = _settings.Instrument != Instrument.Ukulele.Name;
         UkuleleRadio.IsChecked = _settings.Instrument == Instrument.Ukulele.Name;
+        MerlinRadio.IsChecked = _settings.Instrument == Instrument.Merlin.Name;
+        GuitarRadio.IsChecked = UkuleleRadio.IsChecked != true && MerlinRadio.IsChecked != true;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _updatingViewOptions = false;
 
@@ -941,7 +942,9 @@ public partial class MainWindow : Window
         _settings.ShowChords = ShowChordsCheck.IsChecked == true;
         _settings.ShowDiagrams = ShowDiagramsCheck.IsChecked == true;
         _settings.SimplifyChords = SimplifyChordsCheck.IsChecked == true;
-        _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name : Instrument.Guitar.Name;
+        _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name
+            : MerlinRadio.IsChecked == true ? Instrument.Merlin.Name
+            : Instrument.Guitar.Name;
         var keyConventionChanged = _settings.KeyIncludesCapo != (KeyIncludesCapoCheck.IsChecked == true);
         _settings.KeyIncludesCapo = KeyIncludesCapoCheck.IsChecked == true;
         if (keyConventionChanged)

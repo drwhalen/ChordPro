@@ -4,7 +4,9 @@ namespace ChordPro.Core.Chords;
 
 /// <summary>
 /// Finds playable fingerings for a chord on any fretted <see cref="Instrument"/> by searching every
-/// four-fret hand position and ranking the shapes a hand can actually play.
+/// four-fret hand position and ranking the shapes a hand can actually play. Diatonic necks (the
+/// Merlin) are searched by their frets as laid out; where a full chord isn't on the neck, the root
+/// and fifth are played instead, as players of those instruments do.
 /// </summary>
 public static class ChordShapeFinder
 {
@@ -56,11 +58,25 @@ public static class ChordShapeFinder
     /// <summary>All playable fingerings, best first.</summary>
     public static IReadOnlyList<ChordShape> FindAll(ChordName chord, Instrument instrument)
     {
+        var shapes = FindAll(chord, instrument, RequiredTones(chord, instrument));
+        // Three courses on a diatonic neck often can't hold the third (no F on a Merlin): play the
+        // root and fifth (or the root alone) rather than nothing.
+        if (shapes.Count == 0 && instrument.IsDiatonic)
+        {
+            HashSet<int> powerChord = [chord.Root];
+            if (chord.Intervals.Contains(7))
+                powerChord.Add((chord.Root + 7) % 12);
+            shapes = FindAll(chord, instrument, powerChord);
+        }
+        return shapes;
+    }
+
+    private static IReadOnlyList<ChordShape> FindAll(ChordName chord, Instrument instrument, HashSet<int> required)
+    {
         var tones = chord.PitchClasses.ToHashSet();
-        var required = RequiredTones(chord, instrument);
         var candidates = new Dictionary<ChordShape, double>();
 
-        for (var position = 1; position <= HighestPosition; position++)
+        for (var position = 1; position <= Math.Min(HighestPosition, instrument.HighestFret); position++)
         {
             // Each string can be muted, open, or fretted on a chord tone inside the hand span.
             var options = instrument.Tuning.Select(open =>
@@ -68,11 +84,11 @@ public static class ChordShapeFinder
                 var list = new List<int>();
                 if (instrument.BassMustBeRoot)
                     list.Add(-1);
-                for (var fret = 0; fret < position + HandSpan; fret++)
+                for (var fret = 0; fret < position + HandSpan && fret <= instrument.HighestFret; fret++)
                 {
                     if (fret != 0 && fret < position)
                         continue;
-                    if (tones.Contains((open + fret) % 12))
+                    if (tones.Contains((open + instrument.Semitones(fret)) % 12))
                         list.Add(fret);
                 }
                 return list;
@@ -117,7 +133,7 @@ public static class ChordShapeFinder
             return null;
 
         var notes = Enumerable.Range(firstSounding, strings - firstSounding)
-            .Select(i => (instrument.Tuning[i] + frets[i]) % 12)
+            .Select(i => (instrument.Tuning[i] + instrument.Semitones(frets[i])) % 12)
             .ToList();
         if (!required.IsSubsetOf(notes))
             return null;
@@ -125,8 +141,8 @@ public static class ChordShapeFinder
         if (instrument.BassMustBeRoot)
         {
             var lowest = Enumerable.Range(firstSounding, strings - firstSounding)
-                .MinBy(i => instrument.Tuning[i] + frets[i]);
-            if ((instrument.Tuning[lowest] + frets[lowest]) % 12 != chord.Bass)
+                .MinBy(i => instrument.Tuning[i] + instrument.Semitones(frets[i]));
+            if ((instrument.Tuning[lowest] + instrument.Semitones(frets[lowest])) % 12 != chord.Bass)
                 return null;
         }
 
