@@ -13,6 +13,8 @@ public sealed class Song
     public string? Tempo => GetMeta("tempo");
     public string? Time => GetMeta("time");
     public string? Duration => GetMeta("duration");
+    /// <summary>The tuning the song is played in (<c>{x_tuning: Drop D}</c>); see <see cref="Chords.SongTuning"/>.</summary>
+    public string? Tuning => GetMeta("tuning");
 
     /// <summary>The capo fret from <c>{capo}</c>, or 0 when there is none or it isn't a number.</summary>
     public int CapoFret => int.TryParse(Capo, out var capo) ? Math.Clamp(capo, 0, 11) : 0;

@@ -289,7 +289,8 @@ public partial class MainWindow : Window
     {
         FontSize = _fontSize * (_stageMode ? StageFontScale : 1),
         Transpose = _transpose,
-        Capo = _capo,
+        // A guitar capo in the file means nothing on a dulcimer: show the chords as heard.
+        Capo = _capo ?? (CurrentInstrument.IsDiatonic ? 0 : null),
         ShowChords = _settings.ShowChords,
         ShowDiagrams = _settings.ShowDiagrams,
         Instrument = CurrentInstrument,
@@ -297,6 +298,8 @@ public partial class MainWindow : Window
         SimplifyChords = _settings.SimplifyChords,
         KeyIncludesCapo = _settings.KeyIncludesCapo,
         ChordTapped = ShowChordPopup,
+        TransposeBy = shift => SetTranspose(_transpose + shift),
+        Tuning = TuningNote(),
     };
 
     private void ShowMessage(string message)
@@ -340,6 +343,88 @@ public partial class MainWindow : Window
         _settings.Save();
     }
 
+    // ---- Instrument and tuning -------------------------------------------------------------------
+
+    // The player's instrument (View ▾ Diagrams for), for every song.
+    private Instrument PlayerInstrument => Instrument.Find(_settings.Instrument);
+
+    // The song's own tuning: chosen for it in the View menu, or given by its {x_tuning}.
+    private SongTuning? CurrentSongTuning
+    {
+        get
+        {
+            var saved = _path is null ? null : _settings.Songs.GetValueOrDefault(_path);
+            var file = SongTuning.Parse(_song?.Tuning);
+            var instrument = saved?.Tuning is { } name ? Instrument.Find(name) : file?.Instrument;
+            var offset = saved?.TuningOffset ?? file?.Offset ?? 0;
+            return instrument is null && offset == 0 ? null : new SongTuning(instrument, offset);
+        }
+    }
+
+    // What diagrams, fingerings and capo suggestions are for: the player's instrument, in the song's
+    // tuning when that's for the same kind of instrument.
+    private Instrument CurrentInstrument => CurrentSongTuning?.Apply(PlayerInstrument) ?? PlayerInstrument;
+
+    private int TuningOffset => CurrentSongTuning?.Offset ?? 0;
+
+    // The song's tuning for its header, when it isn't the player's usual one.
+    private string? TuningNote()
+    {
+        var parts = new List<string>();
+        if (CurrentInstrument != PlayerInstrument)
+            parts.Add(ShortName(CurrentInstrument));
+        if (TuningOffset != 0)
+            parts.Add(SongTuning.DescribeOffset(TuningOffset));
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
+    // "Guitar (Drop D)" → "Drop D"; "Mandolin" stays.
+    private static string ShortName(Instrument instrument) =>
+        instrument.Name.IndexOf('(') is var open and > 0 && instrument.Name.EndsWith(')')
+            ? instrument.Name[(open + 1)..^1]
+            : instrument.Name;
+
+    // The tunings offered for this song: the song's own (or the player's), then the others for the
+    // same kind of instrument.
+    private List<Instrument> _tuningChoices = [];
+    private bool _updatingTuning;
+
+    private void RefreshSongTuningChoices()
+    {
+        var player = PlayerInstrument;
+        var file = SongTuning.Parse(_song?.Tuning);
+        var usual = file?.Apply(player) ?? player;
+        _tuningChoices = [usual, .. Instrument.All.Where(i => i.Family == player.Family && i != usual)];
+        var saved = _path is null ? null : _settings.Songs.GetValueOrDefault(_path);
+
+        _updatingTuning = true;
+        SongTuningBox.ItemsSource = _tuningChoices
+            .Select((i, index) => index == 0 && usual != player ? $"As the song says: {ShortName(i)}" : i.Name)
+            .ToList();
+        SongTuningBox.SelectedIndex = saved?.Tuning is { } name ? Math.Max(0, _tuningChoices.FindIndex(i => i.Name == name)) : 0;
+        SongPitchBox.SelectedIndex = Math.Clamp(-TuningOffset, 0, 2);
+        _updatingTuning = false;
+
+        var hasSong = _song is not null;
+        SongTuningLabel.IsVisible = SongPitchBox.IsVisible = hasSong;
+        SongTuningBox.IsVisible = hasSong && _tuningChoices.Count > 1;
+    }
+
+    private void OnSongTuningChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingTuning || _path is null || SongTuningBox.SelectedIndex < 0 || SongPitchBox.SelectedIndex < 0)
+            return;
+        var file = SongTuning.Parse(_song?.Tuning);
+        var songSettings = _settings.ForSong(_path);
+        // Remember only a choice that differs from what the song itself says.
+        songSettings.Tuning = SongTuningBox.SelectedIndex == 0 ? null : _tuningChoices[SongTuningBox.SelectedIndex].Name;
+        var offset = -SongPitchBox.SelectedIndex;
+        songSettings.TuningOffset = offset == (file?.Offset ?? 0) ? null : offset;
+        _settings.Save();
+        UpdateSongControls();
+        RenderSong();
+    }
+
     private void OnZoomInClick(object? sender, RoutedEventArgs e) => SetFontSize(_fontSize + 2);
 
     private void OnZoomOutClick(object? sender, RoutedEventArgs e) => SetFontSize(_fontSize - 2);
@@ -368,16 +453,19 @@ public partial class MainWindow : Window
 
     private int FileCapo => _song is null ? 0 : SongRenderer.FileCapo(_song);
 
-    private void OnCapoDownClick(object? sender, RoutedEventArgs e) => SetCapo((_capo ?? FileCapo) - 1);
+    // The capo when none is chosen for the song: the file's, except on a dulcimer, where a guitar capo means nothing.
+    private int DefaultCapo => CurrentInstrument.IsDiatonic ? 0 : FileCapo;
 
-    private void OnCapoUpClick(object? sender, RoutedEventArgs e) => SetCapo((_capo ?? FileCapo) + 1);
+    private void OnCapoDownClick(object? sender, RoutedEventArgs e) => SetCapo((_capo ?? DefaultCapo) - 1);
+
+    private void OnCapoUpClick(object? sender, RoutedEventArgs e) => SetCapo((_capo ?? DefaultCapo) + 1);
 
     private void OnCapoResetClick(object? sender, RoutedEventArgs e) => SetCapo(null);
 
     private void SetCapo(int? capo)
     {
         capo = capo is { } c ? Math.Clamp(c, 0, 11) : null;
-        _capo = capo == FileCapo ? null : capo;
+        _capo = capo == DefaultCapo ? null : capo;
         SaveSongSettings();
         UpdateSongControls();
         RenderSong();
@@ -385,7 +473,6 @@ public partial class MainWindow : Window
 
     // ---- Chord popups and capo suggestions -----------------------------------------------------
 
-    private Instrument CurrentInstrument => Instrument.Find(_settings.Instrument);
 
     private void OnTunerClick(object? sender, RoutedEventArgs e)
     {
@@ -394,7 +481,7 @@ public partial class MainWindow : Window
             _tuner.Activate();
             return;
         }
-        _tuner = new TunerWindow(CurrentInstrument, SongPalette.FromTheme(CurrentTheme), _settings.TunerReference, reference =>
+        _tuner = new TunerWindow(CurrentInstrument.Retuned(TuningOffset), SongPalette.FromTheme(CurrentTheme), _settings.TunerReference, reference =>
         {
             _settings.TunerReference = reference;
             _settings.Save();
@@ -440,7 +527,7 @@ public partial class MainWindow : Window
         }
 
         var soundingKey = writtenKey is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
-        var current = _capo ?? FileCapo;
+        var current = _capo ?? DefaultCapo;
         CapoSuggestions.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 4) });
 
         foreach (var suggestion in CapoSuggester.Suggest(chords, CurrentInstrument, soundingKey).Take(4))
@@ -481,9 +568,10 @@ public partial class MainWindow : Window
     {
         TransposeResetButton.Content = _transpose > 0 ? $"+{_transpose}" : _transpose < 0 ? $"−{-_transpose}" : "0";
         TransposeResetButton.IsEnabled = _transpose != 0;
-        CapoResetButton.Content = (_capo ?? FileCapo).ToString();
+        CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
         FitsVoiceToggle.IsChecked = _path is not null && _settings.Songs.GetValueOrDefault(_path)?.FitsVoice == true;
+        RefreshSongTuningChoices();
         UpdateScrollControls();
     }
 
@@ -913,7 +1001,9 @@ public partial class MainWindow : Window
         SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
         KeyIncludesCapoCheck.IsChecked = _settings.KeyIncludesCapo;
         InstrumentBox.ItemsSource = Instrument.All;
-        InstrumentBox.SelectedItem = CurrentInstrument;
+        InstrumentBox.SelectedItem = PlayerInstrument;
+        _renderedInstrument = _settings.Instrument;
+        RefreshFitFilter();
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _updatingViewOptions = false;
 
@@ -947,8 +1037,16 @@ public partial class MainWindow : Window
         if (keyConventionChanged)
             _settings.KeyConventionFolder = _settings.LibraryFolder; // a choice made by hand isn't guessed again
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
+        var instrumentChanged = _settings.Instrument != _renderedInstrument;
+        _renderedInstrument = _settings.Instrument;
         _settings.Save();
+        UpdateSongControls();
         RenderSong();
+        // Which songs fit depends on the instrument and the easy-chords setting.
+        if (instrumentChanged)
+            RefreshFitFilter();
+        if (instrumentChanged || FitFilter > 0)
+            ApplyLibraryFilter();
         if (keyConventionChanged)
         {
             // The key filter lists the keys you hear, which this changes.
@@ -1536,6 +1634,45 @@ public partial class MainWindow : Window
 
     private int? CapoFilter => CapoFilterCombo.SelectedIndex > 0 ? _filterCapos[CapoFilterCombo.SelectedIndex - 1] : null;
 
+    private string? _renderedInstrument;
+
+    // 0: any song; 1: songs whose chords all have a fingering as they are; 2: also after transposing.
+    private int FitFilter => FitFilterCombo.IsVisible ? Math.Max(0, FitFilterCombo.SelectedIndex) : 0;
+
+    // The fit filter is for dulcimers and the Merlin; a guitar or ukulele can play any chord.
+    private void RefreshFitFilter()
+    {
+        var player = PlayerInstrument;
+        var index = FitFilterCombo.SelectedIndex;
+        _updatingLibraryFilters = true;
+        FitFilterCombo.ItemsSource = new[]
+        {
+            "Any chords",
+            $"Fits my {ShortName(player)}",
+            $"Fits my {ShortName(player)}, transposed if needed",
+        };
+        FitFilterCombo.SelectedIndex = Math.Max(0, index);
+        FitFilterCombo.IsVisible = player.IsDiatonic;
+        _updatingLibraryFilters = false;
+    }
+
+    // Whether a library song's chords all have a fingering on the player's instrument (in the song's
+    // tuning), as the song is shown now (with its saved transposition), or after transposing.
+    private bool FitsInstrument(SongInfo song, bool allowTransposing)
+    {
+        var instrument = SongTuning.Parse(song.Tuning)?.Apply(PlayerInstrument) ?? PlayerInstrument;
+        var saved = _settings.Songs.GetValueOrDefault(song.Path);
+        // As the song is drawn: moved by its transposition, and on a dulcimer heard without the guitar capo.
+        var capo = saved?.Capo ?? (instrument.IsDiatonic ? 0 : song.Capo);
+        var shift = (saved?.Transpose ?? 0) + song.Capo - capo;
+        var key = ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo);
+        var written = _settings.SimplifyChords ? song.Chords.Select(ChordSimplifier.Simplify) : song.Chords;
+        var chords = InstrumentFit.Transpose(written, shift, key).Distinct().ToList();
+        if (InstrumentFit.Check(chords, instrument).AllPlayable)
+            return true;
+        return allowTransposing && InstrumentFit.SuggestTransposition(chords, instrument, key)?.Result.AllPlayable == true;
+    }
+
     // Fill the key and capo choices from the library, keeping the current choice if it's still there.
     private void RefreshLibraryFilterChoices()
     {
@@ -1552,12 +1689,14 @@ public partial class MainWindow : Window
     }
 
     // Searching or filtering by key or capo narrows the list, so every group starts expanded.
-    private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null;
+    private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null || FitFilter > 0;
 
     /// <param name="scrollToSong">Scroll the library to the open song (not while a group is being opened).</param>
     private void ApplyLibraryFilter(bool scrollToSong = true)
     {
         var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter, _settings.KeyIncludesCapo);
+        if (FitFilter > 0)
+            songs = [.. songs.Where(s => FitsInstrument(s, allowTransposing: FitFilter == 2))];
         _updatingLists = true;
         LibraryList.ItemsSource = Grouping == LibraryGrouping.None ? songs : GroupedLibraryItems(songs);
         _updatingLists = false;

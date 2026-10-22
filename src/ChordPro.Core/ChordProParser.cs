@@ -36,6 +36,7 @@ public static partial class ChordProParser
         ["key"] = "key", ["capo"] = "capo", ["tempo"] = "tempo",
         ["time"] = "time", ["duration"] = "duration",
         ["book"] = "book", // LivePrompter's collections
+        ["x_tuning"] = "tuning", ["tuning"] = "tuning",
     };
 
     private static readonly Dictionary<string, SectionKind> SectionAliases = new(StringComparer.OrdinalIgnoreCase)

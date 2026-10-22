@@ -88,6 +88,26 @@ public sealed record Instrument(string Name, IReadOnlyList<int> Tuning, bool Bas
 
     public bool IsDiatonic => FretSemitones is not null;
 
+    /// <summary>
+    /// The kind of instrument, whatever its tuning: Guitar, Ukulele, Mandolin or Dulcimer (the
+    /// Merlin included). A song's own tuning only applies to a player of the same kind.
+    /// </summary>
+    public string Family =>
+        IsDiatonic ? "Dulcimer"
+        : Name.StartsWith("Guitar", StringComparison.Ordinal) ? "Guitar"
+        : Name.Contains("ukulele", StringComparison.OrdinalIgnoreCase) ? "Ukulele"
+        : Name;
+
+    /// <summary>
+    /// The instrument tuned down (or up) by some semitones, for the tuner: the chords are still
+    /// written and fingered as in the usual tuning, only the strings sound lower.
+    /// </summary>
+    public Instrument Retuned(int semitones) => semitones == 0 ? this : this with
+    {
+        Name = $"{Name}, {SongTuning.DescribeOffset(semitones)}",
+        Tuning = [.. Tuning.Select(note => note + semitones)],
+    };
+
     /// <summary>The highest fret.</summary>
     public int HighestFret => FretSemitones is { } frets ? frets.Count - 1 : ChromaticFrets;
 

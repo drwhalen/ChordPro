@@ -131,6 +131,15 @@
                                     <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
                                     <ComboBox x:Name="InstrumentBox" HorizontalAlignment="Stretch" SelectionChanged="OnViewOptionChanged"
                                               ToolTip.Tip="Dulcimer and Merlin diagrams use their diatonic frets (with 6+), written as tab: 0-1-3" />
+                                    <TextBlock x:Name="SongTuningLabel" Classes="label" Text="This song's tuning" Margin="0,6,0,0" />
+                                    <ComboBox x:Name="SongTuningBox" HorizontalAlignment="Stretch" SelectionChanged="OnSongTuningChanged"
+                                              ToolTip.Tip="A tuning for this song only (a song can also give one with {x_tuning: Drop D})" />
+                                    <ComboBox x:Name="SongPitchBox" HorizontalAlignment="Stretch" SelectionChanged="OnSongTuningChanged"
+                                              ToolTip.Tip="Tuned down for this song: the chords are fingered as written, and the tuner targets the lower strings">
+                                        <ComboBoxItem Content="Standard pitch" />
+                                        <ComboBoxItem Content="Half step down" />
+                                        <ComboBoxItem Content="Whole step down" />
+                                    </ComboBox>
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -176,6 +185,9 @@
                                 <ComboBox x:Name="CapoFilterCombo" Grid.Column="2" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged"
                                           ToolTip.Tip="Show only songs played with this capo" />
                             </Grid>
+                            <!-- For dulcimers and the Merlin, whose frets leave some chords out. -->
+                            <ComboBox x:Name="FitFilterCombo" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged" IsVisible="False"
+                                      ToolTip.Tip="Show only songs whose chords all have a fingering on your instrument (as the song is now, or after transposing)" />
                         </StackPanel>
                         <!-- SyncListSelections scrolls to the open song itself, except while a group is opened. -->
                         <ListBox x:Name="LibraryList" AutoScrollToSelectedItem="False" SelectionChanged="OnSongListSelectionChanged" />

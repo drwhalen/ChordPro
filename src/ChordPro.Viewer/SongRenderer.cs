@@ -46,6 +46,10 @@ public sealed record RenderOptions
     public bool KeyIncludesCapo { get; init; }
     /// <summary>Called when a chord or diagram is tapped; null makes chords not tappable (e.g. printing).</summary>
     public Action<ChordTap>? ChordTapped { get; init; }
+    /// <summary>Moves the song by some semitones (the "Transpose" button by chords the instrument can't play); null for no button.</summary>
+    public Action<int>? TransposeBy { get; init; }
+    /// <summary>The song's own tuning, shown with the key ("Drop D, half step down"); null in the player's usual tuning.</summary>
+    public string? Tuning { get; init; }
 }
 
 /// <summary>Builds a read-only visual tree for a <see cref="Song"/>.</summary>
@@ -134,8 +138,11 @@ public sealed partial class SongRenderer(RenderOptions options)
             // already includes the capo keeps the file's own spelling unless the song is transposed.
             details.Add($"Key: {ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : fileCapo))}");
         }
-        if (capo > 0 || song.Capo is not null)
+        // (A dulcimer doesn't use the file's guitar capo, so there's nothing to say about it.)
+        if (capo > 0 || (song.Capo is not null && !options.Instrument.IsDiatonic))
             details.Add(capo > 0 && _writtenKey is { } k ? $"Capo: {capo} (play {TransposeChord(k)} shapes)" : $"Capo: {capo}");
+        if (options.Tuning is { } tuning)
+            details.Add($"Tuning: {tuning}");
         if (song.Tempo is { } tempo)
             details.Add($"Tempo: {tempo}");
         if (song.Time is { } time)
@@ -156,23 +163,12 @@ public sealed partial class SongRenderer(RenderOptions options)
 
         var panel = new WrapPanel();
         var instrument = options.Instrument;
-        var unplayable = new List<string>();
-        var partial = new List<string>();
         foreach (var (written, name) in chords)
         {
             var defined = DefinedShape(song, written, name);
             var shape = defined ?? ChordShapeFinder.Find(name, instrument);
             if (shape is null)
-            {
-                if (ChordName.TryParse(name) is not null)
-                    unplayable.Add(name);
                 continue;
-            }
-            if (defined is null && ChordShapeFinder.MissingTones(name, shape, instrument) is { Count: > 0 } missing)
-            {
-                var flats = name.Length > 1 && name[1] == 'b';
-                partial.Add($"{name} (no {string.Join(" or ", missing.Select(t => ChordTransposer.NoteName(t, flats)))})");
-            }
 
             var diagram = new ChordDiagram(name, shape, FontSize, options.Instrument)
             {
@@ -184,29 +180,47 @@ public sealed partial class SongRenderer(RenderOptions options)
             panel.Children.Add(diagram);
         }
 
-        // Say which chords this instrument can't play as written, so it's no surprise mid-song.
-        var notes = new List<string>();
-        if (unplayable.Count > 0)
-            notes.Add(instrument.IsDiatonic
-                ? $"Not on the {instrument.Name} frets: {string.Join(", ", unplayable)}"
-                : $"No {instrument.Name} fingering for {string.Join(", ", unplayable)}");
-        if (partial.Count > 0)
-            notes.Add($"Played without a note the frets don't have: {string.Join(", ", partial)}");
-        if (notes.Count == 0)
+        // Say which chords this instrument can't play as shown, so it's no surprise mid-song, and
+        // offer the key where they fit.
+        var fit = InstrumentFit.Check(chords.Where(c => DefinedShape(song, c.Written, c.Name) is null).Select(c => c.Name), instrument);
+        if (fit.Complete)
             return panel.Children.Count == 0 ? null : panel;
+
+        var notes = new List<string>();
+        if (fit.Unplayable.Count > 0)
+            notes.Add(instrument.IsDiatonic
+                ? $"Not on the {instrument.Name} frets: {string.Join(", ", fit.Unplayable)}"
+                : $"No {instrument.Name} fingering for {string.Join(", ", fit.Unplayable)}");
+        var shownKey = song.Key is { } key ? ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : FileCapo(song))) : null;
+        var flatKey = ChordTransposer.PrefersFlats(shownKey, 0) == true;
+        if (fit.Partial.Count > 0)
+            notes.Add("Played without a note the frets don't have: " + string.Join(", ", fit.Partial.Select(p =>
+            {
+                var flats = flatKey || (p.Chord.Length > 1 && p.Chord[1] == 'b');
+                return $"{p.Chord} (no {string.Join(" or ", p.Missing.Select(t => ChordTransposer.NoteName(t, flats)))})";
+            })));
 
         var stack = new StackPanel { Spacing = FontSize * 0.4 };
         foreach (var note in notes)
+            stack.Children.Add(Callout(Text("⚠ " + note, FontSize * 0.85, wrap: true)));
+
+        if (InstrumentFit.SuggestTransposition([.. chords.Select(c => c.Name)], instrument, shownKey) is { } move)
         {
-            stack.Children.Add(new Border
+            var target = ChordTransposer.Shift(shownKey, move.Semitones) is { } k ? $" (to {k})" : "";
+            var by = move.Semitones > 0 ? $"up {move.Semitones}" : $"down {-move.Semitones}";
+            var outcome = move.Result.Complete ? "every chord fits"
+                : move.Result.AllPlayable ? "every chord has a fingering"
+                : $"only {string.Join(", ", move.Result.Unplayable)} won't fit";
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = FontSize * 0.5 };
+            line.Children.Add(Text($"Transposed {by}{target}, {outcome}.", FontSize * 0.85, wrap: true));
+            line.Children[0].VerticalAlignment = VerticalAlignment.Center;
+            if (options.TransposeBy is { } transposeBy)
             {
-                Background = Palette.CommentBackground,
-                BorderBrush = Palette.Chord,
-                BorderThickness = new Thickness(3, 0, 0, 0),
-                Padding = new Thickness(FontSize * 0.5, FontSize * 0.25),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Child = Text("⚠ " + note, FontSize * 0.85, wrap: true),
-            });
+                var button = new Button { Content = $"Transpose {(move.Semitones > 0 ? "+" : "−")}{Math.Abs(move.Semitones)}", FontSize = FontSize * 0.8, Padding = new Thickness(FontSize * 0.5, FontSize * 0.15) };
+                button.Click += (_, _) => transposeBy(move.Semitones);
+                line.Children.Add(button);
+            }
+            stack.Children.Add(Callout(line));
         }
         if (panel.Children.Count > 0)
             stack.Children.Add(panel);
@@ -361,6 +375,16 @@ public sealed partial class SongRenderer(RenderOptions options)
     // The chord as it should be shown: simplified if asked, then moved for transposition and capo.
     private string DisplayChord(string written) =>
         TransposeChord(options.SimplifyChords ? ChordSimplifier.Simplify(written) : written);
+
+    private Border Callout(Control content) => new()
+    {
+        Background = Palette.CommentBackground,
+        BorderBrush = Palette.Chord,
+        BorderThickness = new Thickness(3, 0, 0, 0),
+        Padding = new Thickness(FontSize * 0.5, FontSize * 0.25),
+        HorizontalAlignment = HorizontalAlignment.Left,
+        Child = content,
+    };
 
     // A {define} applies to the chord exactly as written, on a guitar in standard tuning.
     private ChordShape? DefinedShape(Song song, string written, string shown) =>

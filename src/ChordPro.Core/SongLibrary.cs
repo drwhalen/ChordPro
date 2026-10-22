@@ -11,6 +11,12 @@ namespace ChordPro.Core;
 public sealed record SongInfo(string Path, string Title, string? Artist, string? Key = null, int Capo = 0,
     IReadOnlyList<string>? Books = null, double? Tempo = null, DateTime? Added = null)
 {
+    /// <summary>The chords the song uses, as written.</summary>
+    public IReadOnlyList<string> Chords { get; init; } = [];
+
+    /// <summary>The song's own tuning (<c>{x_tuning}</c>), if it gives one.</summary>
+    public string? Tuning { get; init; }
+
     /// <summary>The collections the song belongs to, from <c>{book}</c> directives.</summary>
     public IReadOnlyList<string> Books { get; } = Books ?? [];
 
@@ -261,7 +267,11 @@ public static partial class SongLibrary
                 System.Globalization.CultureInfo.InvariantCulture, out var bpm) && bpm is > 20 and < 400 ? bpm : (double?)null;
             // When the file came into the library (its creation, which a converter's overwrite keeps).
             return new SongInfo(path, song.Title ?? Path.GetFileNameWithoutExtension(path), song.Artist,
-                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"), tempo, File.GetCreationTime(path));
+                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"), tempo, File.GetCreationTime(path))
+            {
+                Chords = [.. song.ChordUsages().Distinct()],
+                Tuning = song.Tuning,
+            };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

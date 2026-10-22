@@ -21,6 +21,10 @@ public sealed class SongSettings
     public int Plays { get; set; }
     /// <summary>The singer marked this song, in its transposed key, as sitting well for their voice.</summary>
     public bool FitsVoice { get; set; }
+    /// <summary>The tuning chosen for this song (an instrument name, in the player's family); null to follow the song's <c>{x_tuning}</c>.</summary>
+    public string? Tuning { get; set; }
+    /// <summary>Semitones this song is tuned down or up (−1 for a half step down); null to follow the song's <c>{x_tuning}</c>.</summary>
+    public int? TuningOffset { get; set; }
 }
 
 /// <summary>A library-check problem marked "Looks fine", for as long as its file stays as it was then.</summary>
