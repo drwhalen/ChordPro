@@ -61,6 +61,7 @@ public partial class MainWindow : Window
     private bool _closeConfirmed;
     private IReadOnlyList<string> _chordButtonChords = [];
     private readonly DispatcherTimer _previewTimer;
+    private readonly DispatcherTimer _stageToolbarTimer;
     private double _fontSize = DefaultFontSize;
     private int _transpose;
     private int? _capo;
@@ -118,6 +119,10 @@ public partial class MainWindow : Window
         SongScroller.AddHandler(PointerPressedEvent, OnSongPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         SongScroller.AddHandler(PointerReleasedEvent, OnSongPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
         _reloadTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => ReloadChangedFile());
+        // In stage mode the toolbar hides again a few seconds after it was last used.
+        _stageToolbarTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(3) };
+        _stageToolbarTimer.Tick += (_, _) => HideStageToolbarWhenIdle();
+        AddHandler(PointerMovedEvent, OnStagePointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         // Re-render the preview once typing pauses, not on every key.
         _previewTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => PreviewEdits());
         // A converter or sync can write many files at once; rescan once they've settled.
@@ -482,6 +487,30 @@ public partial class MainWindow : Window
         UpdateScrollControls();
     }
 
+    private VoiceTrainingWindow? _trainingWindow;
+
+    private void OnTrainVoiceClick(object? sender, RoutedEventArgs e)
+    {
+        if (_song is null)
+            return;
+        if (_trainingWindow is { } open)
+        {
+            open.Activate();
+            return;
+        }
+        // Listening and training both want the microphone.
+        if (_scroller.IsRunning)
+            _scroller.Stop();
+        _trainingWindow = new VoiceTrainingWindow(_song, _settings.VoiceTuning ?? VoiceTuning.Default, _settings.VoiceTuning is not null,
+            SpeechModel.FilePath, SongPalette.FromTheme(CurrentTheme), tuning =>
+            {
+                _settings.VoiceTuning = tuning;
+                _settings.Save();
+            });
+        _trainingWindow.Closed += (_, _) => _trainingWindow = null;
+        _trainingWindow.Show(this);
+    }
+
     private void OnFitsVoiceClick(object? sender, RoutedEventArgs e)
     {
         if (_path is null || _song is null)
@@ -568,14 +597,15 @@ public partial class MainWindow : Window
         }
         StatusText.Text = "Loading speech recognition…";
         string? error = "no listener";
-        _voice = CreateVoiceFollower is { } create ? create() : VoiceFollower.TryStart(SpeechModel.FilePath, out error);
+        var tuning = _settings.VoiceTuning ?? VoiceTuning.Default;
+        _voice = CreateVoiceFollower is { } create ? create() : VoiceFollower.TryStart(SpeechModel.FilePath, tuning, out error);
         if (_voice is null)
         {
             StatusText.Text = $"Can't follow your voice: {error}";
             UpdateScrollControls();
             return false;
         }
-        _aligner = new LyricAligner(_song!);
+        _aligner = new LyricAligner(_song!, tuning.MinWords);
         (_voiceTarget, _lastHeard, _unmatched) = (null, null, 0);
         var voice = _voice;
         voice.Heard += (text, at) => Dispatcher.UIThread.Post(() =>
@@ -629,6 +659,8 @@ public partial class MainWindow : Window
             _aligner.Reset();
             _unmatched = 0;
         }
+        if (_voice is not null)
+            _voice.Prompt = _aligner.PromptText();
         UpdateScrollStatus(force: true);
     }
 
@@ -805,6 +837,7 @@ public partial class MainWindow : Window
         var timed = _scrollMode == ScrollMode.Timed;
         ScrollToggle.IsVisible = SlowerButton.IsVisible = SpeedText.IsVisible = FasterButton.IsVisible = !manual;
         TapTempoButton.IsVisible = !manual && !timed;
+        TrainVoiceButton.IsVisible = _scrollMode == ScrollMode.FollowVoice && SpeechModel.IsDownloaded;
         ScrollToggle.IsChecked = _scroller.IsRunning;
         ScrollToggle.Content = _scroller.IsRunning ? "❚❚ Scroll"
             : _scrollMode == ScrollMode.FollowVoice && !SpeechModel.IsDownloaded ? (_downloadingModel ? "Downloading…" : "⬇ Get voice model")
@@ -1054,6 +1087,13 @@ public partial class MainWindow : Window
         if (on)
             CountPlay();
         EditorPane.IsVisible = _editing && !on;
+        // On stage the chart gets the whole screen; the toolbar comes back from the top edge.
+        Toolbar.IsVisible = !on;
+        Toolbar.Background = on ? Background : null;
+        Grid.SetRow(Body, on ? 0 : 1);
+        Grid.SetRowSpan(Body, on ? 2 : 1);
+        StageToolbarHandle.IsVisible = on;
+        _stageToolbarTimer.Stop();
         if (on)
         {
             _windowStateBeforeStage = WindowState;
@@ -1067,6 +1107,45 @@ public partial class MainWindow : Window
         }
         RenderSong();
         UpdateNextSong();
+    }
+
+    private void OnStagePointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_stageMode)
+            return;
+        if (e.GetPosition(this).Y < 12)
+            ShowStageToolbar();
+        else if (Toolbar.IsVisible)
+        {
+            _stageToolbarTimer.Stop();
+            _stageToolbarTimer.Start();
+        }
+    }
+
+    private void OnStageToolbarHandleClick(object? sender, RoutedEventArgs e) => ShowStageToolbar();
+
+    private void ShowStageToolbar()
+    {
+        Toolbar.IsVisible = true;
+        StageToolbarHandle.IsVisible = false;
+        _stageToolbarTimer.Stop();
+        _stageToolbarTimer.Start();
+    }
+
+    // Hide it again, unless it's being used: the pointer is on it, or one of its menus is open.
+    private void HideStageToolbarWhenIdle()
+    {
+        _stageToolbarTimer.Stop();
+        if (!_stageMode)
+            return;
+        var menuOpen = Toolbar.GetVisualDescendants().OfType<Button>().Any(b => b.Flyout?.IsOpen == true);
+        if (Toolbar.IsPointerOver || menuOpen || Toolbar.IsKeyboardFocusWithin)
+        {
+            _stageToolbarTimer.Start();
+            return;
+        }
+        Toolbar.IsVisible = false;
+        StageToolbarHandle.IsVisible = true;
     }
 
     private void OnSidebarToggleClick(object? sender, RoutedEventArgs e)

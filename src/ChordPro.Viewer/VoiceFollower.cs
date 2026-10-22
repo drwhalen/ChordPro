@@ -1,35 +1,24 @@
-using System.Text.RegularExpressions;
-using Whisper.net;
+using ChordPro.Core.Scrolling;
 
 namespace ChordPro.Viewer;
 
 /// <summary>
 /// Listens for singing and turns it into words with Whisper, on this computer (no network): every
-/// <see cref="Interval"/> it transcribes the last <see cref="Window"/> of audio and raises
-/// <see cref="Heard"/>. Recognition of sung words is rough, which is fine: the words are only used
-/// to find the place in lyrics that are already known (see LyricAligner).
+/// interval it transcribes the last few seconds of audio and raises <see cref="Heard"/>. How long
+/// the window is, how often, and how loud singing must be come from a <see cref="VoiceTuning"/>,
+/// which training can fit to the singer. Recognition of sung words is rough, which is fine: the
+/// words are only used to find the place in lyrics that are already known (see LyricAligner).
 /// </summary>
-public sealed partial class VoiceFollower : IDisposable
+public sealed class VoiceFollower : IDisposable
 {
-    // Whisper labels sounds rather than words with brackets: "[BLANK_AUDIO]", "(music)", "*laughs*".
-    [GeneratedRegex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*")]
-    private static partial Regex SoundLabelRegex();
-
-    public const int SampleRate = 16000; // what Whisper expects
-    public static readonly TimeSpan Window = TimeSpan.FromSeconds(4);
-    // A window takes about a tenth of a second to transcribe on Apple Silicon, so once a second keeps
-    // the lag after a line starts short without using much of the machine.
-    public static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
-
-    // Below this (about -50 dBFS) there is nothing to transcribe; Whisper only invents words in silence.
-    private const float MinLevel = 0.003f;
+    public const int SampleRate = Transcriber.SampleRate;
 
     private readonly object _lock = new();
     private readonly Microphone? _microphone;
-    private readonly WhisperFactory _factory;
-    private readonly WhisperProcessor _processor;
+    private readonly Transcriber _transcriber;
+    private readonly VoiceTuning _tuning;
     private readonly int _inputRate;
-    private readonly float[] _ring = new float[(int)(Window.TotalSeconds * SampleRate)];
+    private readonly float[] _ring;
     private int _ringPosition;
     private int _filled;
     private int _sinceLast;
@@ -38,15 +27,11 @@ public sealed partial class VoiceFollower : IDisposable
     private bool _busy;
     private bool _disposed;
 
-    private VoiceFollower(string modelPath, Microphone? microphone, int inputRate)
+    private VoiceFollower(string modelPath, Microphone? microphone, int inputRate, VoiceTuning tuning)
     {
-        _factory = WhisperFactory.FromPath(modelPath);
-        _processor = _factory.CreateBuilder()
-            .WithLanguage("en")
-            .WithThreads(Math.Clamp(Environment.ProcessorCount / 2, 1, 4))
-            .WithNoContext()       // each window stands alone; earlier text would be repeated
-            .WithSingleSegment()
-            .Build();
+        _transcriber = new Transcriber(modelPath);
+        _tuning = tuning;
+        _ring = new float[(int)(tuning.WindowSeconds * SampleRate)];
         _microphone = microphone;
         _inputRate = inputRate;
         if (microphone is not null)
@@ -59,13 +44,13 @@ public sealed partial class VoiceFollower : IDisposable
     private void OnProcessExit(object? sender, EventArgs e) => Dispose();
 
     /// <summary>Opens the default microphone, or returns null with a reason if it can't.</summary>
-    public static VoiceFollower? TryStart(string modelPath, out string? error)
+    public static VoiceFollower? TryStart(string modelPath, VoiceTuning tuning, out string? error)
     {
         if (Microphone.TryOpen(out error) is not { } microphone)
             return null;
         try
         {
-            return new VoiceFollower(modelPath, microphone, microphone.SampleRate);
+            return new VoiceFollower(modelPath, microphone, microphone.SampleRate, tuning);
         }
         catch (Exception ex)
         {
@@ -76,7 +61,8 @@ public sealed partial class VoiceFollower : IDisposable
     }
 
     /// <summary>A follower fed with <see cref="Feed"/> instead of a microphone (for testing with recordings).</summary>
-    public static VoiceFollower ForRecording(string modelPath, int sampleRate) => new(modelPath, null, sampleRate);
+    public static VoiceFollower ForRecording(string modelPath, int sampleRate, VoiceTuning? tuning = null) =>
+        new(modelPath, null, sampleRate, tuning ?? VoiceTuning.Default);
 
     /// <summary>
     /// Raised on a background thread with the words heard in the latest window, and when the
@@ -86,6 +72,12 @@ public sealed partial class VoiceFollower : IDisposable
 
     /// <summary>The level of the latest window (RMS, 0–1), for showing that something is heard.</summary>
     public float Level { get; private set; }
+
+    /// <summary>
+    /// The lyrics sung just before the current place, given to recognition as a hint when the tuning
+    /// asks for it (see LyricAligner.PromptText). Set from any thread.
+    /// </summary>
+    public string? Prompt { get; set; }
 
     /// <summary>Adds audio at the input sample rate. Called on the audio thread.</summary>
     public void Feed(ReadOnlySpan<float> samples)
@@ -117,14 +109,15 @@ public sealed partial class VoiceFollower : IDisposable
             if (samples.Length > 0)
                 _carry = samples[^1];
 
-            if (_sinceLast >= Interval.TotalSeconds * SampleRate && _filled == _ring.Length && !_busy)
+            if (_sinceLast >= _tuning.IntervalSeconds * SampleRate && _filled == _ring.Length && !_busy)
             {
                 _sinceLast = 0;
                 window = new float[_ring.Length];
                 for (var k = 0; k < _ring.Length; k++)
                     window[k] = _ring[(_ringPosition + k) % _ring.Length];
-                Level = MathF.Sqrt(window.Average(s => s * s));
-                if (Level >= MinLevel)
+                Level = Transcriber.Level(window);
+                // Below the gate there is nothing to transcribe; Whisper only invents words in silence.
+                if (Level >= _tuning.MinLevel)
                     _busy = true;
                 else
                     window = null;
@@ -138,11 +131,8 @@ public sealed partial class VoiceFollower : IDisposable
     {
         try
         {
-            var text = "";
-            await foreach (var segment in _processor.ProcessAsync(window))
-                text += segment.Text;
-            text = SoundLabelRegex().Replace(text, " ").Trim();
-            if (text.Any(char.IsLetter))
+            var text = await _transcriber.TranscribeAsync(window, _tuning.UsePrompt ? Prompt : null);
+            if (text.Length > 0)
                 Heard?.Invoke(text, end);
         }
         catch (ObjectDisposedException)
@@ -169,8 +159,7 @@ public sealed partial class VoiceFollower : IDisposable
         // Let a transcription in progress finish before freeing the model.
         for (var i = 0; i < 100 && IsBusy(); i++)
             Thread.Sleep(20);
-        _processor.Dispose();
-        _factory.Dispose();
+        _transcriber.Dispose();
     }
 
     private bool IsBusy()

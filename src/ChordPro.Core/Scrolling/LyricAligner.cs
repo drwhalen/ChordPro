@@ -25,9 +25,10 @@ public sealed class LyricAligner
     // cost of a wrong, missing or extra word.
     private const double Exact = 2, Close = 1, Miss = -1;
 
-    // A place is only trusted on this much evidence, so a stray word or two doesn't move it.
-    private const int MinWords = 3;
+    // A place is only trusted on this much evidence, so a stray word or two doesn't move it. The
+    // number of words can be tuned (see VoiceTuning): a clear singer is placed sooner on two.
     private const double MinScore = 5;
+    private readonly int _minWords;
 
     // Singing pace in words per second: a typical starting guess, then learned from what's heard.
     private const double StartingPace = 2;
@@ -40,6 +41,7 @@ public sealed class LyricAligner
 
     private readonly List<(string Word, int Line)> _words = [];
     private readonly List<(Section Section, int LineIndex)> _lines = [];
+    private readonly List<string> _lineText = [];
     private readonly List<int> _sectionStart = [];   // per line: the index of its section's first word
     private int _position = -1;
     // Where the singer is reckoned to be, in words, and when: set by a clear match, and moved on by
@@ -50,18 +52,22 @@ public sealed class LyricAligner
     private (int Position, double Time) _clear = (-1, double.NaN);
     private double _pace = StartingPace;
 
-    public LyricAligner(Song song)
+    /// <param name="minWords">How many words must match before a place is trusted.</param>
+    public LyricAligner(Song song, int minWords = VoiceTuning.DefaultMinWords)
     {
+        _minWords = Math.Max(2, minWords);
         foreach (var section in song.Sections.Where(s => s.Kind is not (SectionKind.Tab or SectionKind.Grid)))
         {
             for (var i = 0; i < section.Lines.Count; i++)
             {
                 if (section.Lines[i] is not LyricLine line)
                     continue;
-                var words = Words(string.Concat(line.Segments.Select(s => s.Lyric)));
+                var text = string.Concat(line.Segments.Select(s => s.Lyric));
+                var words = Words(text);
                 if (words.Count == 0)
                     continue;
                 _lines.Add((section, i));
+                _lineText.Add(text.Trim());
                 _sectionStart.Add(_lines.Count > 1 && _lines[^2].Section == section ? _sectionStart[^1] : _words.Count);
                 foreach (var word in words)
                     _words.Add((word, _lines.Count - 1));
@@ -71,6 +77,27 @@ public sealed class LyricAligner
 
     /// <summary>The lyric lines in order, as (section, index of the line in it).</summary>
     public IReadOnlyList<(Section Section, int LineIndex)> Lines => _lines;
+
+    /// <summary>Every lyric word in order (normalized as by <see cref="Words"/>), with the index of its line in <see cref="Lines"/>.</summary>
+    public IReadOnlyList<(string Word, int Line)> LyricWords => _words;
+
+    /// <summary>The index in <see cref="Lines"/> of the line last matched, or -1 before anything was heard.</summary>
+    public int CurrentLineNumber => _position < 0 ? -1 : _words[_position].Line;
+
+    /// <summary>
+    /// The lyrics sung just before the current line, for prompting speech recognition. Whisper takes
+    /// a prompt as what was said before the audio, so this must not include the line being sung
+    /// (given upcoming words, it assumes they're already said and leaves them out). Null before
+    /// anything was heard.
+    /// </summary>
+    public string? PromptText(int lines = 2)
+    {
+        if (_position < 0)
+            return null;
+        var line = _words[_position].Line;
+        var text = string.Join(" ", _lineText.Skip(Math.Max(0, line - lines)).Take(line - Math.Max(0, line - lines)));
+        return text.Length == 0 ? null : text;
+    }
 
     /// <summary>The line last matched, or null before anything was heard.</summary>
     public (Section Section, int LineIndex)? CurrentLine => _position < 0 ? null : _lines[_words[_position].Line];
@@ -98,7 +125,7 @@ public sealed class LyricAligner
     public (Section Section, int LineIndex)? Hear(string transcript, double time = double.NaN)
     {
         var heard = Words(transcript);
-        if (heard.Count < MinWords || _words.Count == 0)
+        if (heard.Count < _minWords || _words.Count == 0)
             return null;
 
         var (from, to) = _position < 0 ? (0, _words.Count)
@@ -133,7 +160,7 @@ public sealed class LyricAligner
                     cell = (current[i - 1].Score + Miss, current[i - 1].Matched);
                 current[i] = cell;
 
-                if (cell.Matched >= MinWords && cell.Score >= MinScore && similarity > 0)
+                if (cell.Matched >= _minWords && cell.Score >= Math.Min(MinScore, _minWords * Exact) && similarity > 0)
                 {
                     var ranked = cell.Score - Distance(j, expected);
                     if (ranked > best.Score)
@@ -223,7 +250,7 @@ public sealed class LyricAligner
     }
 
     // Exact, close (most letters right, as recognition gets sung words), or no match (0).
-    private static double Similarity(string heard, string lyric)
+    internal static double Similarity(string heard, string lyric)
     {
         if (heard == lyric)
             return Exact;

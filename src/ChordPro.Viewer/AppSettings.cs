@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ChordPro.Core;
+using ChordPro.Core.Scrolling;
 using ChordPro.Core.Themes;
 
 namespace ChordPro.Viewer;
@@ -69,6 +70,8 @@ public sealed class AppSettings
     public List<SongTheme> CustomThemes { get; set; } = [];
     public Dictionary<string, SongSettings> Songs { get; set; } = [];
     public List<AcceptedIssue> AcceptedIssues { get; set; } = [];
+    /// <summary>Follow voice settings found by training; null for the standard ones.</summary>
+    public VoiceTuning? VoiceTuning { get; set; }
 
     public SongSettings ForSong(string path)
     {

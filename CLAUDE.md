@@ -35,14 +35,17 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   - `Themes/SongTheme` (built-in and custom themes, WCAG contrast), `Layout/PageLayout` (page breaks and
     page turns), `Layout/LivePrompterWidth` (LivePrompter's 28 em line budget), `Scrolling/`
     (`MusicalTimeline`, `TimeMarkers`, `ScrollTimeline`, `TempoTracker`, `TapTempo`, `LyricAligner` —
-    places heard words in the lyrics for Follow voice),
+    places heard words in the lyrics for Follow voice; `VoiceTuning` — Follow voice settings;
+    `VoiceTraining` — reference timeline, replay and scoring for training),
     `Tuning/` (`PitchDetector` — YIN, `Note`)
 - `src/ChordPro.Viewer` — Avalonia UI. `MainWindow` wires everything; `SongRenderer` builds the song as
   controls from `RenderOptions` (also exposes `Groups` for pagination and `LineControls` for scrolling);
   `SmartScroller` + `ScrollTimelineBuilder` (scroll modes); `PdfExporter` (Skia vector PDF);
   `WindowTheme` (recolors Fluent controls); `ThemeEditorWindow`, `TunerWindow`, `ChordPopup`,
   `ChordDiagram`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
-  on-device) + `SpeechModel` (one-time model download); `ChoiceDialog` (Save / Don't Save / Cancel);
+  on-device) + `SpeechModel` (one-time model download); `Transcriber` (Whisper windows and whole
+  recordings with word times), `VoiceTrainer` + `VoiceTrainingWindow` (Train…), `AudioFile` (WAV, or
+  afconvert on macOS); `ChoiceDialog` (Save / Don't Save / Cancel);
   `SetlistSuggestWindow` (Suggest a set);
   `AppSettings` (JSON).
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
@@ -79,6 +82,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `afconvert -f WAVE -d LEF32@16000 -c 1` makes spoken test lines (public-domain lyrics only); real
   singing needs the user's recordings. Point `CHORDPRO_VIEWER_MODELS` at a folder holding
   `ggml-base.en.bin` so tests don't download into the user's Application Support.
+  Training: `VoiceTrainingWindow.TrainOnFileAsync(path)` with a whole-song WAV (never Record).
 - **Errors:** `ErrorLog` writes anything unhandled to `~/Library/Logs/ChordPro Viewer/errors.log`
   (`CHORDPRO_VIEWER_LOG` overrides it), since a Finder-launched app has no console, and keeps UI-thread
   errors from closing the app. Its dispatcher hook must be installed after Avalonia starts (in `App`):
@@ -89,7 +93,11 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
 - Whisper's Metal backend aborts at process exit if a model is still loaded (macOS shows a crash
   report), so `VoiceFollower` frees it on `ProcessExit`; always dispose it.
 - Whisper invents words in silence and labels sounds (`[BLANK_AUDIO]`, `(music)`): `VoiceFollower` skips
-  quiet windows and strips bracketed labels, and `LyricAligner` needs 3+ matching words to move.
+  quiet windows and strips bracketed labels, and `LyricAligner` needs 3+ matching words to move (both tunable).
+- Whisper takes a prompt as what was said *before* the audio: given the upcoming lyrics it leaves those
+  words out. Lyric hints are the lines before the current one (`LyricAligner.PromptText`).
+- `new DispatcherTimer(interval, priority, handler)` starts the timer immediately; create it with an
+  `Interval` and `Tick` when it should start later.
 - **Fluent theme recoloring:** Fluent builds brushes from its palette once, so mutating or replacing
   `FluentTheme.Palettes` at runtime doesn't reach every control. `WindowTheme.Apply` swaps in a new
   `FluentTheme` instance instead. `Palettes` only accepts the Light and Dark keys.

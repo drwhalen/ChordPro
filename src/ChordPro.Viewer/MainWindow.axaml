@@ -57,8 +57,9 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <DockPanel>
-        <Border x:Name="Toolbar" DockPanel.Dock="Top" Padding="12,5"
+    <!-- In stage mode the body spans both rows, so the toolbar floats over the chart instead of pushing it down. -->
+    <Grid RowDefinitions="Auto,*">
+        <Border x:Name="Toolbar" Grid.Row="0" ZIndex="1" Padding="12,5"
                 BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
             <WrapPanel Classes="toolbar">
@@ -109,6 +110,8 @@
                     <Button x:Name="SlowerButton" Content="−" Click="OnScrollSlowerClick" />
                     <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="34" TextAlignment="Center" />
                     <Button x:Name="FasterButton" Content="+" Click="OnScrollFasterClick" />
+                    <Button x:Name="TrainVoiceButton" Content="Train…" Click="OnTrainVoiceClick" IsVisible="False"
+                            ToolTip.Tip="Train Follow voice to your voice and microphone: sing this song once and it finds the settings that follow you best" />
                     <Button x:Name="TapTempoButton" Content="Tap" Click="OnTapTempoClick"
                             ToolTip.Tip="Tap along with the beat to set the tempo (remembered for this song)" />
                     <Button x:Name="PageUpButton" Content="▲" Click="OnPageUpClick" ToolTip.Tip="Page up (Page Up, Shift+Space, or tap the top of the song)" />
@@ -145,6 +148,7 @@
             </WrapPanel>
         </Border>
 
+        <DockPanel x:Name="Body" Grid.Row="1">
         <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="280"
                 BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
@@ -251,6 +255,11 @@
             <!-- Marks where the line being played is kept while scrolling follows the song. -->
             <Border x:Name="ReadingMarker" IsVisible="False" IsHitTestVisible="False"
                     HorizontalAlignment="Left" VerticalAlignment="Top" Width="6" CornerRadius="3" Margin="12,0,0,0" />
+            <!-- In stage mode the toolbar hides; this brings it back (for touch, where there's no mouse to move to the top). -->
+            <Button x:Name="StageToolbarHandle" IsVisible="False" Click="OnStageToolbarHandleClick"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,4,0,0" Opacity="0.55"
+                    Padding="14,2" CornerRadius="0,0,8,8" FontSize="12" Content="▾ Controls"
+                    ToolTip.Tip="Show the toolbar (or move the mouse to the top edge)" />
             <!-- In stage mode, the next song in the setlist (tap to go to it) and a way back. -->
             <Button x:Name="NextSongBadge" IsVisible="False" Click="OnNextSongClick"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,16"
@@ -265,5 +274,6 @@
                 <TextBlock x:Name="PreviousSongText" FontSize="16" Text="‹ Back" />
             </Button>
         </Panel>
-    </DockPanel>
+        </DockPanel>
+    </Grid>
 </Window>
