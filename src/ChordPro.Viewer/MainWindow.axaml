@@ -80,6 +80,7 @@
                     <Button x:Name="TransposeResetButton" Classes="value" Content="0" IsEnabled="False"
                             Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
                     <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
+                    <TextBlock x:Name="ShownKeyText" Classes="label" ToolTip.Tip="The key you're playing in (the file itself isn't changed)" />
                     <ToggleButton x:Name="FitsVoiceToggle" Content="My key" Click="OnFitsVoiceClick"
                                   ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
                 </StackPanel>

@@ -298,7 +298,9 @@ public partial class MainWindow : Window
         SimplifyChords = _settings.SimplifyChords,
         KeyIncludesCapo = _settings.KeyIncludesCapo,
         ChordTapped = ShowChordPopup,
-        TransposeBy = shift => SetTranspose(_transpose + shift),
+        // After the click: transposing rebuilds the song, including the button being clicked, and
+        // doing that inside its own click can leave the toolbar unrefreshed.
+        TransposeBy = shift => Dispatcher.UIThread.Post(() => SetTranspose(_transpose + shift)),
         Tuning = TuningNote(),
     };
 
@@ -568,6 +570,10 @@ public partial class MainWindow : Window
     {
         TransposeResetButton.Content = _transpose > 0 ? $"+{_transpose}" : _transpose < 0 ? $"−{-_transpose}" : "0";
         TransposeResetButton.IsEnabled = _transpose != 0;
+        // The key as the song's header shows it (what you hear), so a transposition shows where it went.
+        var shownKey = _song?.Key is { } key ? ChordTransposer.Shift(key, _transpose + (_settings.KeyIncludesCapo ? 0 : FileCapo)) : null;
+        ShownKeyText.Text = shownKey is null ? "" : $"Key: {shownKey}";
+        ShownKeyText.IsVisible = shownKey is not null;
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
         FitsVoiceToggle.IsChecked = _path is not null && _settings.Songs.GetValueOrDefault(_path)?.FitsVoice == true;
