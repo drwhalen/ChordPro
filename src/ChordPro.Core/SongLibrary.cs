@@ -4,11 +4,12 @@ using ChordPro.Core.Chords;
 namespace ChordPro.Core;
 
 /// <summary>
-/// What the library list needs to know about a song file (title, artist, key, capo and books), so a
-/// library can be listed, grouped and filtered without keeping whole songs in memory.
+/// What the library list needs to know about a song file (title, artist, key, capo, books and
+/// tempo), so a library can be listed, grouped, filtered and planned into sets without keeping whole
+/// songs in memory.
 /// </summary>
 public sealed record SongInfo(string Path, string Title, string? Artist, string? Key = null, int Capo = 0,
-    IReadOnlyList<string>? Books = null)
+    IReadOnlyList<string>? Books = null, double? Tempo = null)
 {
     /// <summary>The collections the song belongs to, from <c>{book}</c> directives.</summary>
     public IReadOnlyList<string> Books { get; } = Books ?? [];
@@ -230,8 +231,10 @@ public static partial class SongLibrary
         try
         {
             var song = ChordProParser.ParseFile(path);
+            var tempo = double.TryParse(song.Tempo, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var bpm) && bpm is > 20 and < 400 ? bpm : (double?)null;
             return new SongInfo(path, song.Title ?? Path.GetFileNameWithoutExtension(path), song.Artist,
-                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"));
+                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"), tempo);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

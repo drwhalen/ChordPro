@@ -16,6 +16,8 @@ public sealed class SongSettings
     public string? ScrollMode { get; set; }
     /// <summary>Tempo override for musical scrolling, in BPM.</summary>
     public double? Tempo { get; set; }
+    /// <summary>How many times the song was played (scrolled or shown in stage mode), for favouring familiar songs in a set.</summary>
+    public int Plays { get; set; }
 }
 
 /// <summary>Settings saved as JSON in the user's application-data folder.</summary>

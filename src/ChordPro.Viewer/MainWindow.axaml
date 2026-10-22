@@ -196,6 +196,8 @@
                                 <Button Content="↑" Click="OnMoveUpClick" ToolTip.Tip="Move up" />
                                 <Button Content="↓" Click="OnMoveDownClick" ToolTip.Tip="Move down" />
                             </WrapPanel>
+                            <Button Content="Suggest a set…" Click="OnSuggestSetlistClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    ToolTip.Tip="Build a set that flows (keys, tempos, capo) around the songs in this setlist, or see how this one flows" />
                         </StackPanel>
                         <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,8,*" Margin="0,8,0,0">
                             <Button Grid.Column="0" Content="◀ Previous" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"

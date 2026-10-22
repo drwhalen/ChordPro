@@ -27,7 +27,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   - `ChordProParser`, `Song` (model), `SongFile` (read/write keeping line endings and BOM),
     `ChordTransposer` (also written/sounding keys), `Setlist`
     (incl. LivePrompter `.txt` setlists), `SongLibrary` (scan, group, filter, key-convention guess),
-    `LibraryCheck`, `SongTime`
+    `LibraryCheck`, `SetlistPlanner` (scores song-to-song steps and plans sets that flow), `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,
     `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument`
@@ -42,6 +42,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `WindowTheme` (recolors Fluent controls); `ThemeEditorWindow`, `TunerWindow`, `ChordPopup`,
   `ChordDiagram`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
   on-device) + `SpeechModel` (one-time model download); `ChoiceDialog` (Save / Don't Save / Cancel);
+  `SetlistSuggestWindow` (Suggest a set);
   `AppSettings` (JSON).
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
 - `samples/` — `amazing-grace.cho` (timed markers), `morning-road.cho` (musical bars, capo, `{define}`),

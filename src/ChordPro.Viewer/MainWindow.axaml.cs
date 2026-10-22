@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private string? _lastHeard;
     private int _unmatched;
     private bool _downloadingModel;
+    private bool _countedPlay;   // this song's play is counted once per opening
 
     /// <summary>Makes the voice listener instead of opening the microphone (for testing with recordings).</summary>
     public Func<VoiceFollower?>? CreateVoiceFollower { get; set; }
@@ -184,6 +185,7 @@ public partial class MainWindow : Window
         _speed = songSettings.ScrollSpeed ?? 1;
         _tempo = songSettings.Tempo;
         _tapTempo = new TapTempo();
+        _countedPlay = false;
         _scrollMode = Enum.TryParse<ScrollMode>(songSettings.ScrollMode, out var mode) ? mode : ScrollMode.Timed;
         ApplyScrollRate();
 
@@ -520,6 +522,7 @@ public partial class MainWindow : Window
         if (_scrollMode == ScrollMode.FollowVoice && _voice is null && !StartVoice())
             return;
         _scroller.Start();
+        CountPlay();
         if (_scrollMode == ScrollMode.FollowVoice)
             OnScrolledByHand(_scroller.Time); // pick up the lyrics from where the view is
     }
@@ -1002,12 +1005,24 @@ public partial class MainWindow : Window
 
     private void OnStageToggleClick(object? sender, RoutedEventArgs e) => SetStageMode(!_stageMode);
 
+    // Opening a song isn't playing it; scrolling it or putting it on stage is.
+    private void CountPlay()
+    {
+        if (_countedPlay || _path is null)
+            return;
+        _countedPlay = true;
+        _settings.ForSong(_path).Plays++;
+        _settings.Save();
+    }
+
     private void SetStageMode(bool on)
     {
         if (on == _stageMode)
             return;
         _stageMode = on;
         StageToggle.IsChecked = on;
+        if (on)
+            CountPlay();
         EditorPane.IsVisible = _editing && !on;
         if (on)
         {
@@ -1820,21 +1835,68 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnSaveSetlistClick(object? sender, RoutedEventArgs e)
+    private async void OnSaveSetlistClick(object? sender, RoutedEventArgs e) => await SaveSetlistAsAsync();
+
+    private async Task<bool> SaveSetlistAsAsync(string? suggestedName = null)
     {
+        // A LivePrompter library keeps its setlists as .txt in its Setlists folder; start there.
+        var livePrompter = _settings.KeyIncludesCapo;
+        var extension = livePrompter ? SongLibrary.TextExtension : Setlist.FileExtension;
+        var setlistsFolder = _settings.LibraryFolder is { } library && Directory.Exists(Path.Combine(library, "Setlists"))
+            ? await StorageProvider.TryGetFolderFromPathAsync(Path.Combine(library, "Setlists"))
+            : null;
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save setlist",
-            SuggestedFileName = _setlistPath is null ? "Setlist" + Setlist.FileExtension : Path.GetFileName(_setlistPath),
-            DefaultExtension = Setlist.FileExtension.TrimStart('.'),
+            SuggestedFileName = suggestedName is not null ? suggestedName + extension
+                : _setlistPath is null ? "Setlist" + extension : Path.GetFileName(_setlistPath),
+            SuggestedStartLocation = setlistsFolder,
+            DefaultExtension = extension.TrimStart('.'),
             // Saving as .txt writes song names the way LivePrompter does.
-            FileTypeChoices = [ViewerSetlistFiles, LivePrompterSetlistFiles],
+            FileTypeChoices = livePrompter ? [LivePrompterSetlistFiles, ViewerSetlistFiles] : [ViewerSetlistFiles, LivePrompterSetlistFiles],
         });
-        if (file?.TryGetLocalPath() is { } path)
+        if (file?.TryGetLocalPath() is not { } path)
+            return false;
+        _setlistPath = path;
+        SetlistChanged();
+        return true;
+    }
+
+    private void OnSuggestSetlistClick(object? sender, RoutedEventArgs e)
+    {
+        if (_library.Count == 0)
         {
-            _setlistPath = path;
-            SetlistChanged();
+            StatusText.Text = "Choose a library folder first: sets are built from its songs";
+            return;
         }
+        var byPath = _library.ToDictionary(s => s.Path);
+        var setlist = _setlist.Songs.Where(p => !Setlist.IsDivider(p)).Select(p => byPath.GetValueOrDefault(p) ?? SongLibrary.ReadInfo(p)).OfType<SongInfo>().ToList();
+        new SetlistSuggestWindow(_library, setlist, PlannedFor, SongPalette.FromTheme(CurrentTheme),
+            use: paths => ReplaceSetlist(paths),
+            saveAs: async paths =>
+            {
+                ReplaceSetlist(paths);
+                await SaveSetlistAsAsync($"Suggested set {DateTime.Now:yyyy-MM-dd}");
+            }).Show(this);
+    }
+
+    // How the player plays a song: the key heard after their transpose, their tempo and capo, and plays.
+    private PlannedSong PlannedFor(SongInfo song)
+    {
+        var settings = _settings.Songs.GetValueOrDefault(song.Path);
+        var capo = settings?.Capo ?? song.Capo;
+        var heard = ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo), settings?.Transpose ?? 0);
+        return new PlannedSong(song, heard, settings?.Tempo ?? song.Tempo, capo, settings?.Plays ?? 0);
+    }
+
+    // A suggestion becomes the setlist (unsaved until Save as).
+    private void ReplaceSetlist(IReadOnlyList<string> paths)
+    {
+        _setlist.Songs.Clear();
+        _setlist.Songs.AddRange(paths);
+        _setlistPath = null;
+        SetlistChanged();
+        StatusText.Text = $"Setlist replaced with the suggested set of {paths.Count} songs";
     }
 
     private void OnAddToSetlistClick(object? sender, RoutedEventArgs e)
@@ -1925,7 +1987,7 @@ file sealed class SongInfoComparer : IEqualityComparer<SongInfo>
 
     public bool Equals(SongInfo? x, SongInfo? y) =>
         x is not null && y is not null && x.Path == y.Path && x.Title == y.Title && x.Artist == y.Artist &&
-        x.Key == y.Key && x.Capo == y.Capo && x.Books.SequenceEqual(y.Books);
+        x.Key == y.Key && x.Capo == y.Capo && x.Tempo == y.Tempo && x.Books.SequenceEqual(y.Books);
 
     public int GetHashCode(SongInfo obj) => obj.Path.GetHashCode();
 }
