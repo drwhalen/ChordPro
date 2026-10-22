@@ -77,6 +77,13 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `afconvert -f WAVE -d LEF32@16000 -c 1` makes spoken test lines (public-domain lyrics only); real
   singing needs the user's recordings. Point `CHORDPRO_VIEWER_MODELS` at a folder holding
   `ggml-base.en.bin` so tests don't download into the user's Application Support.
+- **Errors:** `ErrorLog` writes anything unhandled to `~/Library/Logs/ChordPro Viewer/errors.log`
+  (`CHORDPRO_VIEWER_LOG` overrides it), since a Finder-launched app has no console, and keeps UI-thread
+  errors from closing the app. Its dispatcher hook must be installed after Avalonia starts (in `App`):
+  touching `Dispatcher.UIThread` earlier breaks the main loop. A macOS crash report alone shows .NET
+  frames as `???`, so check this log first.
+- Replace the editor's text only through `SetEditorText`, which clears the selection first; a
+  selection left past the end of the new text is a likely crash with macOS text input.
 - Whisper's Metal backend aborts at process exit if a model is still loaded (macOS shows a crash
   report), so `VoiceFollower` frees it on `ProcessExit`; always dispose it.
 - Whisper invents words in silence and labels sounds (`[BLANK_AUDIO]`, `(music)`): `VoiceFollower` skips

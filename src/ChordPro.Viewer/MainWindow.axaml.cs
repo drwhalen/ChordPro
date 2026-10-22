@@ -111,6 +111,8 @@ public partial class MainWindow : Window
         _scroller.RunningChanged += (_, _) => OnScrollRunningChanged();
         _scroller.Progressed += (_, _) => UpdateScrollStatus();
         _scroller.ScrolledByHand += OnScrolledByHand;
+        ErrorLog.Recovered += message =>
+            StatusText.Text = $"Something went wrong ({message}). Details are in {ErrorLog.FilePath}";
         // Tap the top or bottom of the song to turn pages in manual mode.
         SongScroller.AddHandler(PointerPressedEvent, OnSongPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         SongScroller.AddHandler(PointerReleasedEvent, OnSongPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -227,9 +229,9 @@ public partial class MainWindow : Window
         {
             text = File.ReadAllText(_path);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _reloadTimer.Start(); // still being written; try again shortly
+            _reloadTimer.Start(); // still being written, or iCloud is busy with it; try again shortly
             return;
         }
         // File events can arrive without a real change (e.g. when watching starts on macOS).
@@ -1521,12 +1523,22 @@ public partial class MainWindow : Window
             return;
         }
         _changedOnDisk = false;
-        _settingEditorText = true;
-        EditorBox.Text = _savedText;
-        EditorBox.CaretIndex = 0;
-        _settingEditorText = false;
+        SetEditorText(_savedText, 0);
         ShowSongText(_savedText);
         UpdateEditorState();
+    }
+
+    // Replaces the editor's text with the cursor at caret. The selection is cleared first: a
+    // selection left over from longer text points past the end of the new text, which macOS's
+    // text input (asking about the selection between key presses) can trip over.
+    private void SetEditorText(string text, int caret, bool quiet = true)
+    {
+        _settingEditorText = quiet;
+        EditorBox.ClearSelection();
+        EditorBox.CaretIndex = 0;
+        EditorBox.Text = text;
+        EditorBox.CaretIndex = Math.Clamp(caret, 0, text.Length);
+        _settingEditorText = false;
     }
 
     private void OnEditorTextChanged(object? sender, TextChangedEventArgs e)
@@ -1622,9 +1634,7 @@ public partial class MainWindow : Window
             case "Save":
                 return await SaveEditsAsync();
             case "Don't Save":
-                _settingEditorText = true;
-                EditorBox.Text = _savedText;
-                _settingEditorText = false;
+                SetEditorText(_savedText, 0);
                 UpdateEditorState();
                 return true;
             default:
@@ -1653,8 +1663,7 @@ public partial class MainWindow : Window
         var text = EditorBox.Text ?? "";
         var at = Math.Clamp(EditorBox.CaretIndex, 0, text.Length);
         var insert = $"[{chord}]";
-        EditorBox.Text = text.Insert(at, insert);
-        EditorBox.CaretIndex = at + insert.Length;
+        SetEditorText(text.Insert(at, insert), at + insert.Length, quiet: false);
         EditorBox.Focus();
     }
 

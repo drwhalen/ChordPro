@@ -13,6 +13,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        ErrorLog.InstallForUIThread();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = _mainWindow = new MainWindow(desktop.Args?.FirstOrDefault());
 

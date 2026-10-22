@@ -6,8 +6,11 @@ internal static class Program
 {
     // Usage: ChordPro.Viewer [path/to/song.cho]
     [STAThread]
-    public static void Main(string[] args) =>
+    public static void Main(string[] args)
+    {
+        ErrorLog.Install();
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     // Also used by the Avalonia designer.
     public static AppBuilder BuildAvaloniaApp() =>
