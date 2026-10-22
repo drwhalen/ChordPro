@@ -1858,9 +1858,17 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // In stage mode, show what's coming next so the key and the next chart are no surprise.
+    // In stage mode, show what's coming next so the key and the next chart are no surprise; tapping
+    // it goes there, and a Back button goes to the song before.
     private void UpdateNextSong()
     {
+        var palette = SongPalette.FromTheme(CurrentTheme);
+        var current = _path is null ? -1 : _setlist.Songs.IndexOf(_path);
+        PreviousSongBadge.IsVisible = _stageMode && _setlist.Songs.Take(Math.Max(0, current)).Any(s => !Setlist.IsDivider(s));
+        PreviousSongText.Foreground = palette.Text;
+        PreviousSongBadge.Background = palette.CommentBackground;
+        PreviousSongBadge.BorderBrush = palette.ChorusBar;
+
         if (!_stageMode || NextInSetlist() is not var (next, divider))
         {
             NextSongBadge.IsVisible = false;
@@ -1882,8 +1890,7 @@ public partial class MainWindow : Window
             text += $"{Path.GetFileNameWithoutExtension(next)} (missing)";
         }
 
-        var palette = SongPalette.FromTheme(CurrentTheme);
-        NextSongText.Text = text;
+        NextSongText.Text = text + "  ›";
         NextSongText.Foreground = palette.Text;
         NextSongBadge.Background = palette.CommentBackground;
         NextSongBadge.BorderBrush = palette.ChorusBar;
