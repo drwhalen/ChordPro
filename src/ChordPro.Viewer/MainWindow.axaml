@@ -246,6 +246,23 @@
             </DockPanel>
         </Border>
 
+        <DockPanel>
+            <!-- In stage mode, the next song in the setlist (tap to go to it) and a way back, in a strip of their own
+                 below the chart so they never cover the words. -->
+            <Panel x:Name="StageFooter" DockPanel.Dock="Bottom" IsVisible="False" Margin="28,6,28,10">
+                <Button x:Name="NextSongBadge" IsVisible="False" Click="OnNextSongClick"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Padding="14,8" CornerRadius="8" BorderThickness="1" Cursor="Hand"
+                        ToolTip.Tip="Go to the next song (→ key or foot pedal)">
+                    <TextBlock x:Name="NextSongText" FontSize="18" />
+                </Button>
+                <Button x:Name="PreviousSongBadge" IsVisible="False" Click="OnPreviousSongClick"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Padding="12,8" CornerRadius="8" BorderThickness="1" Cursor="Hand"
+                        ToolTip.Tip="Back to the previous song (← key)">
+                    <TextBlock x:Name="PreviousSongText" FontSize="16" Text="‹ Back" />
+                </Button>
+            </Panel>
         <Panel>
             <ScrollViewer x:Name="SongScroller"
                           HorizontalScrollBarVisibility="Disabled"
@@ -260,20 +277,8 @@
                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,4,0,0" Opacity="0.55"
                     Padding="14,2" CornerRadius="0,0,8,8" FontSize="12" Content="▾ Controls"
                     ToolTip.Tip="Show the toolbar (or move the mouse to the top edge)" />
-            <!-- In stage mode, the next song in the setlist (tap to go to it) and a way back. -->
-            <Button x:Name="NextSongBadge" IsVisible="False" Click="OnNextSongClick"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,16"
-                    Padding="14,8" CornerRadius="8" BorderThickness="1" Cursor="Hand"
-                    ToolTip.Tip="Go to the next song (→ key or foot pedal)">
-                <TextBlock x:Name="NextSongText" FontSize="18" />
-            </Button>
-            <Button x:Name="PreviousSongBadge" IsVisible="False" Click="OnPreviousSongClick"
-                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="28,0,0,16"
-                    Padding="12,8" CornerRadius="8" BorderThickness="1" Cursor="Hand"
-                    ToolTip.Tip="Back to the previous song (← key)">
-                <TextBlock x:Name="PreviousSongText" FontSize="16" Text="‹ Back" />
-            </Button>
         </Panel>
+        </DockPanel>
         </DockPanel>
     </Grid>
 </Window>

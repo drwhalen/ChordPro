@@ -1951,6 +1951,7 @@ public partial class MainWindow : Window
         if (!_stageMode || NextInSetlist() is not var (next, divider))
         {
             NextSongBadge.IsVisible = false;
+            StageFooter.IsVisible = PreviousSongBadge.IsVisible;
             return;
         }
         var text = "Next: ";
@@ -1974,6 +1975,7 @@ public partial class MainWindow : Window
         NextSongBadge.Background = palette.CommentBackground;
         NextSongBadge.BorderBrush = palette.ChorusBar;
         NextSongBadge.IsVisible = true;
+        StageFooter.IsVisible = true;
     }
 
     // Remember the setlist between sessions, and keep its file up to date once it has one.
