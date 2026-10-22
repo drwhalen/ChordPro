@@ -478,7 +478,37 @@ public partial class MainWindow : Window
         TransposeResetButton.IsEnabled = _transpose != 0;
         CapoResetButton.Content = (_capo ?? FileCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
+        FitsVoiceToggle.IsChecked = _path is not null && _settings.Songs.GetValueOrDefault(_path)?.FitsVoice == true;
         UpdateScrollControls();
+    }
+
+    private void OnFitsVoiceClick(object? sender, RoutedEventArgs e)
+    {
+        if (_path is null || _song is null)
+        {
+            FitsVoiceToggle.IsChecked = false;
+            return;
+        }
+        var fits = FitsVoiceToggle.IsChecked == true;
+        _settings.ForSong(_path).FitsVoice = fits;
+        _settings.Save();
+        var key = ChordTransposer.Shift(ChordTransposer.SoundingKey(_song.Key, FileCapo, _settings.KeyIncludesCapo), _transpose);
+        StatusText.Text = fits
+            ? $"Noted: {_song.Title ?? "this song"}{(key is null ? "" : $" in {key}")} sits well for your voice"
+            : $"No longer marked as fitting your voice";
+    }
+
+    // The keys the singer is comfortable in: songs they marked, and songs they transposed.
+    private VoiceRange LearnedVoice()
+    {
+        var byPath = _library.ToDictionary(s => s.Path);
+        var keys = _settings.Songs
+            .Where(s => s.Value.FitsVoice || s.Value.Transpose != 0)
+            .Select(s => byPath.GetValueOrDefault(s.Key))
+            .OfType<SongInfo>()
+            .Select(s => PlannedFor(s).Key)
+            .OfType<string>();
+        return new VoiceRange([.. keys]);
     }
 
     // ---- Scrolling: manual, timed, musical, follow audio ------------------------------------
@@ -1181,6 +1211,67 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnSetlistPdfClick(object? sender, RoutedEventArgs e)
+    {
+        var name = _setlistPath is null ? "Setlist" : Path.GetFileNameWithoutExtension(_setlistPath);
+        var (entries, missing) = BookletEntries();
+        if (entries.All(entry => entry.IsDivider))
+        {
+            StatusText.Text = "The setlist has no songs to print";
+            return;
+        }
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save setlist as PDF",
+            SuggestedFileName = name + ".pdf",
+            DefaultExtension = "pdf",
+            FileTypeChoices = [new FilePickerFileType("PDF") { Patterns = ["*.pdf"] }],
+        });
+        if (file?.TryGetLocalPath() is not { } pdfPath)
+            return;
+        try
+        {
+            await PdfExporter.ExportSetlistAsync(name, entries, pdfPath);
+            StatusText.Text = $"Saved {Path.GetFileName(pdfPath)}" + (missing > 0 ? $" ({missing} missing {(missing == 1 ? "song" : "songs")} left out)" : "");
+            Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"Could not save PDF: {ex.Message}";
+        }
+    }
+
+    // The setlist as the player plays it: each song with their transpose and capo, keys as heard.
+    private (List<BookletEntry> Entries, int Missing) BookletEntries()
+    {
+        var entries = new List<BookletEntry>();
+        var missing = 0;
+        foreach (var path in _setlist.Songs)
+        {
+            if (Setlist.IsDivider(path))
+            {
+                entries.Add(new BookletEntry(Setlist.DividerName(path), null, null, 0, null, null, null));
+                continue;
+            }
+            Song song;
+            try
+            {
+                song = ChordProParser.ParseFile(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                missing++;
+                continue;
+            }
+            var info = SongLibrary.ReadInfo(path) ?? new SongInfo(path, song.Title ?? Path.GetFileNameWithoutExtension(path), song.Artist);
+            var played = PlannedFor(info);
+            var settings = _settings.Songs.GetValueOrDefault(path);
+            var options = CurrentRenderOptions() with { Transpose = settings?.Transpose ?? 0, Capo = settings?.Capo };
+            entries.Add(new BookletEntry(info.Title, info.Artist, played.Key, played.Capo, played.Tempo, song, options));
+        }
+        return (entries, missing);
+    }
+
     // ---- Library and recent files ------------------------------------------------------------
 
     private async void OnChooseFolderClick(object? sender, RoutedEventArgs e)
@@ -1312,8 +1403,19 @@ public partial class MainWindow : Window
         var issues = await Task.Run(() => LibraryCheck.Run(songs, setlists, livePrompter));
         StatusText.Text = _path is null ? "" : Path.GetFileName(_path);
 
+        // "Looks fine" lasts until the file changes: forget acceptances for files changed since.
+        static long Ticks(string path) => File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : 0;
+        _settings.AcceptedIssues.RemoveAll(a => a.FileTicks != Ticks(a.Path));
+        _settings.Save();
+        bool IsAccepted(LibraryIssue issue) => _settings.AcceptedIssues.Any(a => a.Path == issue.Path && a.Problem == issue.Problem);
+        void Accept(LibraryIssue issue)
+        {
+            _settings.AcceptedIssues.Add(new AcceptedIssue { Path = issue.Path, Problem = issue.Problem, FileTicks = Ticks(issue.Path) });
+            _settings.Save();
+        }
+
         _checkWindow?.Close();
-        _checkWindow = new LibraryCheckWindow(issues, SongPalette.FromTheme(CurrentTheme), OpenPath);
+        _checkWindow = new LibraryCheckWindow(issues, SongPalette.FromTheme(CurrentTheme), OpenPath, IsAccepted, Accept);
         _checkWindow.Closed += (_, _) => _checkWindow = null;
         _checkWindow.Show(this);
     }
@@ -1387,7 +1489,11 @@ public partial class MainWindow : Window
     private List<object> GroupedLibraryItems(List<SongInfo> songs)
     {
         var items = new List<object>();
-        foreach (var group in SongLibrary.Group(songs, Grouping))
+        var groups = SongLibrary.Group(songs, Grouping);
+        // Recently added is for finding what just came in: open the newest group.
+        if (Grouping == LibraryGrouping.Recent && groups.Count > 0 && !IsLibraryNarrowed && _expandedGroups.Count == 0)
+            _expandedGroups.Add(groups[0].Name);
+        foreach (var group in groups)
         {
             var expanded = IsGroupExpanded(group.Name);
             items.Add(new GroupHeader(group.Name, group.Songs.Count, expanded));
@@ -1871,7 +1977,7 @@ public partial class MainWindow : Window
         }
         var byPath = _library.ToDictionary(s => s.Path);
         var setlist = _setlist.Songs.Where(p => !Setlist.IsDivider(p)).Select(p => byPath.GetValueOrDefault(p) ?? SongLibrary.ReadInfo(p)).OfType<SongInfo>().ToList();
-        new SetlistSuggestWindow(_library, setlist, PlannedFor, SongPalette.FromTheme(CurrentTheme),
+        new SetlistSuggestWindow(_library, setlist, PlannedFor, LearnedVoice(), SongPalette.FromTheme(CurrentTheme),
             use: paths => ReplaceSetlist(paths),
             saveAs: async paths =>
             {

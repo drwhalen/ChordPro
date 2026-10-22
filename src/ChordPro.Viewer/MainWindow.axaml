@@ -79,6 +79,8 @@
                     <Button x:Name="TransposeResetButton" Classes="value" Content="0" IsEnabled="False"
                             Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
                     <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
+                    <ToggleButton x:Name="FitsVoiceToggle" Content="My key" Click="OnFitsVoiceClick"
+                                  ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="label" Text="Capo" />
@@ -162,6 +164,7 @@
                                 <ComboBoxItem Content="No grouping" />
                                 <ComboBoxItem Content="Group by artist" />
                                 <ComboBoxItem Content="Group by book" />
+                                <ComboBoxItem Content="Recently added" />
                             </ComboBox>
                             <Grid ColumnDefinitions="*,6,*">
                                 <ComboBox x:Name="KeyFilterCombo" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged"
@@ -189,6 +192,7 @@
                                 <Button Content="New" Click="OnNewSetlistClick" />
                                 <Button Content="Open…" Click="OnOpenSetlistClick" />
                                 <Button Content="Save as…" Click="OnSaveSetlistClick" />
+                                <Button Content="PDF…" Click="OnSetlistPdfClick" ToolTip.Tip="The whole setlist as one PDF to print: a list of the songs with key, capo and tempo, then every song" />
                             </WrapPanel>
                             <WrapPanel Classes="buttons">
                                 <Button Content="+ Add" Click="OnAddToSetlistClick" ToolTip.Tip="Add the open song" />

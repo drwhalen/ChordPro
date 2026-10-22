@@ -107,6 +107,25 @@ public sealed class LibraryTests : IDisposable
     }
 
     [Fact]
+    public void GroupsRecentlyAddedSongsNewestFirst()
+    {
+        var now = new DateTime(2026, 10, 22, 15, 0, 0);   // a Thursday
+        SongInfo Added(string title, DateTime when) => new($"/{title}", title, null, Added: when);
+        SongInfo[] songs =
+        [
+            Added("Old", new DateTime(2026, 8, 3)), Added("This morning", now.AddHours(-5)), Added("Monday", new DateTime(2026, 10, 19)),
+            Added("Last night", now.AddDays(-1)), Added("Start of month", new DateTime(2026, 10, 2)), Added("Just now", now),
+            new SongInfo("/unknown", "Unknown", null),
+        ];
+
+        var groups = SongLibrary.Group(songs, LibraryGrouping.Recent, now);
+
+        Assert.Equal(["Today", "Yesterday", "Earlier this week", "Earlier this month", "August 2026", "Date unknown"], groups.Select(g => g.Name));
+        Assert.Equal(["Just now", "This morning"], groups[0].Songs.Select(s => s.Title));
+        Assert.Equal(["Earlier this week"], SongLibrary.GroupNames(songs[2], LibraryGrouping.Recent, now));
+    }
+
+    [Fact]
     public void FiltersByKeyAndCapo()
     {
         SongInfo[] songs =

@@ -23,6 +23,7 @@ public sealed class SetlistSuggestWindow : Window
     private readonly Action<IReadOnlyList<string>> _use;
     private readonly Func<IReadOnlyList<string>, Task> _saveAs;
     private readonly SongPalette _palette;
+    private readonly VoiceRange _voice;
 
     private readonly ComboBox _length = new() { ItemsSource = new[] { 6, 8, 10, 12, 15, 20 }, SelectedItem = 12, MinWidth = 70 };
     private readonly ComboBox _from = new() { MinWidth = 180 };
@@ -37,13 +38,15 @@ public sealed class SetlistSuggestWindow : Window
     private SetlistPlan? _plan;
     private int _variation;
 
-    public SetlistSuggestWindow() : this([], [], s => new PlannedSong(s, s.Key, s.Tempo, s.Capo), SongPalette.FromTheme(Core.Themes.SongTheme.Day), _ => { }, _ => Task.CompletedTask) { }
+    public SetlistSuggestWindow() : this([], [], s => new PlannedSong(s, s.Key, s.Tempo, s.Capo), new VoiceRange([]), SongPalette.FromTheme(Core.Themes.SongTheme.Day), _ => { }, _ => Task.CompletedTask) { }
 
     /// <param name="setlist">The songs in the setlist now: kept in every suggestion.</param>
     /// <param name="toPlanned">How the player plays a song: the key heard (with their transpose), tempo, capo, plays.</param>
+    /// <param name="voice">The keys the singer is comfortable in (songs marked "My key", or transposed).</param>
     public SetlistSuggestWindow(IReadOnlyList<SongInfo> library, IReadOnlyList<SongInfo> setlist, Func<SongInfo, PlannedSong> toPlanned,
-        SongPalette palette, Action<IReadOnlyList<string>> use, Func<IReadOnlyList<string>, Task> saveAs)
+        VoiceRange voice, SongPalette palette, Action<IReadOnlyList<string>> use, Func<IReadOnlyList<string>, Task> saveAs)
     {
+        _voice = voice;
         _library = library;
         _toPlanned = toPlanned;
         _picked = [.. setlist.Select(toPlanned)];
@@ -88,6 +91,11 @@ public sealed class SetlistSuggestWindow : Window
         var options = new WrapPanel { Children = { Label("Songs"), _length, Label("from"), _from } };
         foreach (var child in options.Children)
             child.Margin = new Thickness(0, 0, 8, 6);
+        _nearKeys.Content = voice.IsEmpty ? "Stay near my songs' keys" : $"Stay near my keys ({string.Join(", ", voice.Keys.Distinct().Take(6))})";
+        _nearKeys.IsEnabled = _picked.Count > 0 || !voice.IsEmpty;
+        ToolTip.SetTip(_nearKeys, voice.IsEmpty
+            ? "Prefer keys near the songs in your setlist. Mark songs that sit well for your voice with “My key” and it learns your range."
+            : "Prefer keys near the ones you marked with “My key” or transposed to, and those of the songs in your setlist");
         var checks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { _nearKeys, _favourPlayed } };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 10), Children = { intro, options, checks, _suggest, _heading, _summary } };
         DockPanel.SetDock(top, Dock.Top);
@@ -114,7 +122,8 @@ public sealed class SetlistSuggestWindow : Window
             .Select(_toPlanned)
             .ToList();
         var plan = SetlistPlanner.Plan(new SetlistRequest(pool, _picked, (int)(_length.SelectedItem ?? 12),
-            NearMustIncludeKeys: _nearKeys.IsChecked == true, FavourPlayed: _favourPlayed.IsChecked == true, Variation: _variation++));
+            NearMustIncludeKeys: _nearKeys.IsChecked == true, FavourPlayed: _favourPlayed.IsChecked == true, Variation: _variation++,
+            Voice: _nearKeys.IsChecked == true ? _voice : null));
         _suggest.Content = "Try another";
         Show(plan, "Suggested set");
         _useButton.IsEnabled = _saveButton.IsEnabled = plan.Songs.Count > 0;
@@ -135,6 +144,9 @@ public sealed class SetlistSuggestWindow : Window
             var song = plan.Songs[i];
             var picked = _picked.Any(p => p.Song.Path == song.Song.Path);
             var details = string.Join("   ", new[] { song.Key, song.Tempo is { } t ? $"{t:0} BPM" : null, song.Capo > 0 ? $"capo {song.Capo}" : null }.OfType<string>());
+            // Far from the singer's keys: suggest moving it, e.g. "try in A (+2)".
+            if (_voice.SuggestShift(song.Key) is { } shift)
+                details += $"\ntry in {ChordTransposer.Shift(song.Key, shift)} ({shift:+0;-0})";
             _rows.Children.Add(new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("28,*,Auto"),

@@ -9,7 +9,7 @@ namespace ChordPro.Core;
 /// songs in memory.
 /// </summary>
 public sealed record SongInfo(string Path, string Title, string? Artist, string? Key = null, int Capo = 0,
-    IReadOnlyList<string>? Books = null, double? Tempo = null)
+    IReadOnlyList<string>? Books = null, double? Tempo = null, DateTime? Added = null)
 {
     /// <summary>The collections the song belongs to, from <c>{book}</c> directives.</summary>
     public IReadOnlyList<string> Books { get; } = Books ?? [];
@@ -26,7 +26,7 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
 public sealed record KeyChoice(string Key, string Label);
 
 /// <summary>How the library list is grouped.</summary>
-public enum LibraryGrouping { None, Artist, Book }
+public enum LibraryGrouping { None, Artist, Book, Recent }
 
 /// <summary>A heading in the grouped library (an artist or a book) and the songs under it.</summary>
 public sealed record SongGroup(string Name, IReadOnlyList<SongInfo> Songs)
@@ -93,10 +93,20 @@ public static partial class SongLibrary
     /// <summary>
     /// Groups songs by artist or by book, ignoring case. Artists sort without a leading "The" so
     /// "The Beatles" files under B. A song in several books appears under each. Songs keep their
-    /// order within a group; songs with no artist or book come last.
+    /// order within a group; songs with no artist or book come last. By <see cref="LibraryGrouping.Recent"/>,
+    /// newest first under headings like "Today" and "Earlier this week", as of <paramref name="now"/>.
     /// </summary>
-    public static List<SongGroup> Group(IEnumerable<SongInfo> songs, LibraryGrouping grouping)
+    public static List<SongGroup> Group(IEnumerable<SongInfo> songs, LibraryGrouping grouping, DateTime? now = null)
     {
+        if (grouping == LibraryGrouping.Recent)
+        {
+            var today = (now ?? DateTime.Now).Date;
+            return songs
+                .OrderByDescending(s => s.Added ?? DateTime.MinValue)
+                .GroupBy(s => RecentGroup(s.Added, today))
+                .Select(g => new SongGroup(g.Key, g.ToList()))
+                .ToList();
+        }
         var fallback = grouping == LibraryGrouping.Book ? SongGroup.NoBook : SongGroup.UnknownArtist;
         return songs
             .SelectMany(song => GroupNames(song, grouping).Select(name => (Name: name, Song: song)))
@@ -108,8 +118,10 @@ public static partial class SongLibrary
     }
 
     /// <summary>The names of the groups a song is listed under.</summary>
-    public static IEnumerable<string> GroupNames(SongInfo song, LibraryGrouping grouping)
+    public static IEnumerable<string> GroupNames(SongInfo song, LibraryGrouping grouping, DateTime? now = null)
     {
+        if (grouping == LibraryGrouping.Recent)
+            return [RecentGroup(song.Added, (now ?? DateTime.Now).Date)];
         if (grouping == LibraryGrouping.Book)
         {
             var books = song.Books.Select(b => b.Trim()).Where(b => b.Length > 0)
@@ -117,6 +129,20 @@ public static partial class SongLibrary
             return books.Count > 0 ? books : [SongGroup.NoBook];
         }
         return [song.Artist?.Trim() is { Length: > 0 } artist ? artist : SongGroup.UnknownArtist];
+    }
+
+    // "Today", "Yesterday", "Earlier this week" (since Monday), "Earlier this month", then the month.
+    private static string RecentGroup(DateTime? added, DateTime today)
+    {
+        if (added is not { } when)
+            return "Date unknown";
+        var day = when.Date;
+        var weekStart = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        if (day >= today) return "Today";
+        if (day == today.AddDays(-1)) return "Yesterday";
+        if (day >= weekStart) return "Earlier this week";
+        if (day.Year == today.Year && day.Month == today.Month) return "Earlier this month";
+        return day.ToString("MMMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
     }
 
     /// <summary>The artist name used for sorting: without a leading "The ".</summary>
@@ -233,8 +259,9 @@ public static partial class SongLibrary
             var song = ChordProParser.ParseFile(path);
             var tempo = double.TryParse(song.Tempo, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var bpm) && bpm is > 20 and < 400 ? bpm : (double?)null;
+            // When the file came into the library (its creation, which a converter's overwrite keeps).
             return new SongInfo(path, song.Title ?? Path.GetFileNameWithoutExtension(path), song.Artist,
-                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"), tempo);
+                song.Key?.Trim(), song.CapoFret, song.GetMetaValues("book"), tempo, File.GetCreationTime(path));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

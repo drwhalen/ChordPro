@@ -25,7 +25,8 @@ public sealed record SetlistRequest(
     int Length,
     bool NearMustIncludeKeys = true,
     bool FavourPlayed = false,
-    int Variation = 0);
+    int Variation = 0,
+    VoiceRange? Voice = null);
 
 /// <summary>
 /// Plans sets that flow: each song leads into the next by key (the same key, its relative major or
@@ -179,15 +180,12 @@ public static class SetlistPlanner
                     if (i != j)
                         _steps[i, j] = Step(pool[i], pool[j]).Score;
 
-            // Near the keys of the songs picked: the tonic within a couple of semitones of one of them.
-            var homes = must.Select(m => m.Key is null ? null : SongLibrary.ParseKey(m.Key)).OfType<(int Root, bool Minor)>().Select(k => k.Root).ToList();
-            _voice = [.. pool.Select(p =>
-            {
-                if (!request.NearMustIncludeKeys || homes.Count == 0 || p.Key is null || SongLibrary.ParseKey(p.Key) is not var (root, _))
-                    return 0.6;
-                var distance = homes.Min(h => Math.Min((root - h + 12) % 12, (h - root + 12) % 12));
-                return Math.Exp(-distance * distance / 6.0);
-            })];
+            // Near the singer's comfortable keys: the ones they marked or transposed to, and the keys of
+            // the songs picked for this set.
+            var keys = (request.NearMustIncludeKeys ? must.Select(m => m.Key).OfType<string>() : [])
+                .Concat(request.Voice?.Keys ?? []);
+            var voice = new VoiceRange(keys);
+            _voice = [.. pool.Select(p => voice.Fit(p.Key))];
 
             // Energy by tempo, as a rank within the pool (0 slowest, 1 fastest); unknown is middling.
             var tempos = pool.Select(p => p.Tempo).OfType<double>().Order().ToList();
