@@ -106,27 +106,48 @@ public class ChordShapeTests
     [InlineData("D7", "0-5-6")]
     [InlineData("A", "1-2-4")]
     public void FindsMerlinShapesOnItsDiatonicFrets(string chord, string tab) =>
-        Assert.Equal(tab, Instrument.Merlin.Notation(ChordShapeFinder.Find(chord, Instrument.Merlin)!));
+        Assert.Equal(tab, Instrument.DulcimerDAdd.Notation(ChordShapeFinder.Find(chord, Instrument.DulcimerDAdd)!));
 
     [Fact]
     public void NamesTheMerlinsSixAndAHalfFret()
     {
         // Fret 7 as laid out is the 6+ fret, a semitone below the octave: G# on the A string, for E7.
-        var shape = ChordShapeFinder.Find("E7", Instrument.Merlin)!;
-        Assert.Equal("7-6+-8", Instrument.Merlin.Notation(shape));
-        Assert.Equal(11, Instrument.Merlin.Semitones(7));
+        var shape = ChordShapeFinder.Find("E7", Instrument.DulcimerDAdd)!;
+        Assert.Equal("7-6+-8", Instrument.DulcimerDAdd.Notation(shape));
+        Assert.Equal(11, Instrument.DulcimerDAdd.Semitones(7));
     }
 
     [Fact]
     public void PlaysRootAndFifthWhereTheMerlinHasNoThird()
     {
         // No G# within reach for E major: E5, as Merlin players play it.
-        Assert.Equal("1-1-1", Instrument.Merlin.Notation(ChordShapeFinder.Find("E", Instrument.Merlin)!));
+        Assert.Equal("1-1-1", Instrument.DulcimerDAdd.Notation(ChordShapeFinder.Find("E", Instrument.DulcimerDAdd)!));
         // No F or Bb anywhere on a D-A-D diatonic neck.
-        Assert.Null(ChordShapeFinder.Find("F", Instrument.Merlin));
+        Assert.Null(ChordShapeFinder.Find("F", Instrument.DulcimerDAdd));
+    }
+
+    [Fact]
+    public void FindsShapesInEachDulcimerTuning()
+    {
+        // G-D-GG is D-A-DD a fourth up: the same shapes, a fourth higher.
+        Assert.Equal("0-0-2", Instrument.MerlinGDgg.Notation(ChordShapeFinder.Find("G", Instrument.MerlinGDgg)!));
+        Assert.Equal("0-1-3", Instrument.MerlinGDgg.Notation(ChordShapeFinder.Find("C", Instrument.MerlinGDgg)!));
+        // D-A-A: G is G-B-D across the strings; A is E-A-C#.
+        Assert.Equal("3-1-3", Instrument.DulcimerDAA.Notation(ChordShapeFinder.Find("G", Instrument.DulcimerDAA)!));
+        Assert.Equal("1-0-2", Instrument.DulcimerDAA.Notation(ChordShapeFinder.Find("A", Instrument.DulcimerDAA)!));
+        Assert.Empty(Instrument.DulcimerDAD.DoubledStrings);
+        Assert.Equal([2], Instrument.DulcimerDAdd.DoubledStrings);
+    }
+
+    [Fact]
+    public void FindsInstrumentsBySavedName()
+    {
+        Assert.Same(Instrument.DulcimerDAdd, Instrument.Find("Seagull Merlin")); // the name saved before it was renamed
+        Assert.Same(Instrument.Ukulele, Instrument.Find("Ukulele"));
+        Assert.Same(Instrument.Guitar, Instrument.Find(null));
     }
 
     [Fact]
     public void SuggestsNoCapoOnADiatonicNeck() =>
-        Assert.Equal([0], CapoSuggester.Suggest([("G", 2), ("D", 2)], Instrument.Merlin).Select(s => s.Capo));
+        Assert.Equal([0], CapoSuggester.Suggest([("G", 2), ("D", 2)], Instrument.DulcimerDAdd).Select(s => s.Capo));
 }

@@ -31,8 +31,9 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     (comfortable keys learned from "My key" marks and transposes), `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,
-    `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument` (guitar, ukulele, Seagull Merlin; a diatonic
-    neck has `FretSemitones`, and shape frets are positions as laid out, so Merlin fret 7 is "6+")
+    `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument` (guitar, ukulele, dulcimer/Merlin tunings; a
+    diatonic neck has `FretSemitones`, and shape frets are positions as laid out, so fret 7 is "6+";
+    `Instrument.Find` maps saved names, including the old "Seagull Merlin")
   - `Themes/SongTheme` (built-in and custom themes, WCAG contrast), `Layout/PageLayout` (page breaks and
     page turns), `Layout/LivePrompterWidth` (LivePrompter's 28 em line budget), `Scrolling/`
     (`MusicalTimeline`, `TimeMarkers`, `ScrollTimeline`, `TempoTracker`, `TapTempo`, `LyricAligner` —

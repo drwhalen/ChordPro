@@ -292,7 +292,7 @@ public partial class MainWindow : Window
         Capo = _capo,
         ShowChords = _settings.ShowChords,
         ShowDiagrams = _settings.ShowDiagrams,
-        Instrument = Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar,
+        Instrument = CurrentInstrument,
         Palette = SongPalette.FromTheme(CurrentTheme),
         SimplifyChords = _settings.SimplifyChords,
         KeyIncludesCapo = _settings.KeyIncludesCapo,
@@ -385,7 +385,7 @@ public partial class MainWindow : Window
 
     // ---- Chord popups and capo suggestions -----------------------------------------------------
 
-    private Instrument CurrentInstrument => Instrument.All.FirstOrDefault(i => i.Name == _settings.Instrument) ?? Instrument.Guitar;
+    private Instrument CurrentInstrument => Instrument.Find(_settings.Instrument);
 
     private void OnTunerClick(object? sender, RoutedEventArgs e)
     {
@@ -912,9 +912,8 @@ public partial class MainWindow : Window
         ShowDiagramsCheck.IsChecked = _settings.ShowDiagrams;
         SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
         KeyIncludesCapoCheck.IsChecked = _settings.KeyIncludesCapo;
-        UkuleleRadio.IsChecked = _settings.Instrument == Instrument.Ukulele.Name;
-        MerlinRadio.IsChecked = _settings.Instrument == Instrument.Merlin.Name;
-        GuitarRadio.IsChecked = UkuleleRadio.IsChecked != true && MerlinRadio.IsChecked != true;
+        InstrumentBox.ItemsSource = Instrument.All;
+        InstrumentBox.SelectedItem = CurrentInstrument;
         ShowDiagramsCheck.IsEnabled = _settings.ShowChords;
         _updatingViewOptions = false;
 
@@ -942,9 +941,7 @@ public partial class MainWindow : Window
         _settings.ShowChords = ShowChordsCheck.IsChecked == true;
         _settings.ShowDiagrams = ShowDiagramsCheck.IsChecked == true;
         _settings.SimplifyChords = SimplifyChordsCheck.IsChecked == true;
-        _settings.Instrument = UkuleleRadio.IsChecked == true ? Instrument.Ukulele.Name
-            : MerlinRadio.IsChecked == true ? Instrument.Merlin.Name
-            : Instrument.Guitar.Name;
+        _settings.Instrument = (InstrumentBox.SelectedItem as Instrument ?? Instrument.Guitar).Name;
         var keyConventionChanged = _settings.KeyIncludesCapo != (KeyIncludesCapoCheck.IsChecked == true);
         _settings.KeyIncludesCapo = KeyIncludesCapoCheck.IsChecked == true;
         if (keyConventionChanged)
