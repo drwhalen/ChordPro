@@ -50,6 +50,17 @@ public partial class MainWindow : Window
     private MusicalTimeline? _musical;
     private string? _path;
     private string? _loadedText;
+
+    // Editing: the text as last saved (with "\n" line endings), how the file is written, and whether
+    // it changed on disk while there were unsaved edits.
+    private bool _editing;
+    private string _savedText = "";
+    private TextFileFormat _fileFormat = TextFileFormat.Default;
+    private bool _changedOnDisk;
+    private bool _settingEditorText;
+    private bool _closeConfirmed;
+    private IReadOnlyList<string> _chordButtonChords = [];
+    private readonly DispatcherTimer _previewTimer;
     private double _fontSize = DefaultFontSize;
     private int _transpose;
     private int? _capo;
@@ -104,6 +115,8 @@ public partial class MainWindow : Window
         SongScroller.AddHandler(PointerPressedEvent, OnSongPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         SongScroller.AddHandler(PointerReleasedEvent, OnSongPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
         _reloadTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => ReloadChangedFile());
+        // Re-render the preview once typing pauses, not on every key.
+        _previewTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => PreviewEdits());
         // A converter or sync can write many files at once; rescan once they've settled.
         _libraryRescanTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) =>
         {
@@ -129,7 +142,19 @@ public partial class MainWindow : Window
 
     // ---- Loading ---------------------------------------------------------------------------
 
-    private void LoadFile(string path)
+    // Every way of opening a song comes through here, so unsaved edits are never dropped by
+    // opening another one. Without unsaved edits it loads straight away.
+    private async void LoadFile(string path)
+    {
+        if (!await ConfirmKeepOrDiscardEditsAsync())
+        {
+            SyncListSelections(); // put the list highlight back on the song being edited
+            return;
+        }
+        LoadSong(path);
+    }
+
+    private void LoadSong(string path)
     {
         Song song;
         string text;
@@ -173,6 +198,8 @@ public partial class MainWindow : Window
         RevealInLibrary(_path);
         SyncListSelections();
         UpdateNextSong();
+        if (_editing)
+            LoadEditor();
     }
 
     // Auto-reload: re-read the file when another program saves it, keeping the scroll position.
@@ -209,6 +236,19 @@ public partial class MainWindow : Window
         if (text == _loadedText)
             return;
         _loadedText = text;
+        if (_editing)
+        {
+            // Unsaved edits are never replaced without asking; otherwise the editor follows the file.
+            if (IsDirty)
+            {
+                _changedOnDisk = true;
+                StatusText.Text = $"{Path.GetFileName(_path)} changed on disk. Save keeps your version; Revert loads the new one.";
+                return;
+            }
+            LoadEditor();
+            StatusText.Text = $"{Path.GetFileName(_path)} — reloaded {DateTime.Now:t}";
+            return;
+        }
         _song = ChordProParser.Parse(text);
         _musical = MusicalTimeline.Build(_song);
         ApplyScrollRate();
@@ -966,6 +1006,7 @@ public partial class MainWindow : Window
             return;
         _stageMode = on;
         StageToggle.IsChecked = on;
+        EditorPane.IsVisible = _editing && !on;
         if (on)
         {
             _windowStateBeforeStage = WindowState;
@@ -1006,11 +1047,20 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        if (e.Source is TextBox)
-            return; // let the search box have its keys
-
         // Cmd on macOS, Ctrl elsewhere.
         var command = PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        // Save and Edit work while typing in the editor.
+        if (e.KeyModifiers.HasFlag(command) && e.Key is Key.S or Key.E)
+        {
+            if (e.Key == Key.E)
+                OnEditToggleClick(this, e);
+            else if (_editing)
+                _ = SaveEditsAsync();
+            e.Handled = true;
+            return;
+        }
+        if (e.Source is TextBox)
+            return; // let the search box and the editor have their keys
         if (e.KeyModifiers.HasFlag(command))
         {
             switch (e.Key)
@@ -1409,6 +1459,223 @@ public partial class MainWindow : Window
         _updatingLists = false;
     }
 
+    // ---- Editing ------------------------------------------------------------------------------
+
+    private bool IsDirty => _editing && (EditorBox.Text ?? "") != _savedText;
+
+    private void OnEditToggleClick(object? sender, RoutedEventArgs e)
+    {
+        if (_editing)
+            _ = StopEditingAsync();
+        else
+            StartEditing();
+    }
+
+    private void StartEditing()
+    {
+        if (_path is null || _song is null)
+        {
+            EditToggle.IsChecked = false;
+            StatusText.Text = "Open a song to edit it";
+            return;
+        }
+        if (_stageMode)
+            SetStageMode(false);
+        _scroller.Stop();
+        _editing = true;
+        EditToggle.IsChecked = true;
+        EditorPane.IsVisible = true;
+        LoadEditor();
+        EditorBox.Focus();
+    }
+
+    private async Task StopEditingAsync()
+    {
+        if (!await ConfirmKeepOrDiscardEditsAsync())
+        {
+            EditToggle.IsChecked = true;
+            return;
+        }
+        _editing = false;
+        _previewTimer.Stop();
+        EditToggle.IsChecked = false;
+        EditorPane.IsVisible = false;
+        // Show the song as saved (changes not kept are dropped from the preview too).
+        if (_loadedText is not null)
+            ShowSongText(_loadedText);
+        UpdateEditorState();
+    }
+
+    // Puts the file's current text in the editor.
+    private void LoadEditor()
+    {
+        if (_path is null)
+            return;
+        try
+        {
+            (_savedText, _fileFormat) = SongFile.Read(_path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"Could not read {Path.GetFileName(_path)}: {ex.Message}";
+            return;
+        }
+        _changedOnDisk = false;
+        _settingEditorText = true;
+        EditorBox.Text = _savedText;
+        EditorBox.CaretIndex = 0;
+        _settingEditorText = false;
+        ShowSongText(_savedText);
+        UpdateEditorState();
+    }
+
+    private void OnEditorTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_settingEditorText)
+            return;
+        _previewTimer.Stop();
+        _previewTimer.Start();
+        UpdateEditorState();
+    }
+
+    private void PreviewEdits()
+    {
+        _previewTimer.Stop();
+        if (_editing)
+            ShowSongText(EditorBox.Text ?? "");
+    }
+
+    // Renders text as the song, keeping the scroll position, and refreshes the chord buttons.
+    private void ShowSongText(string text)
+    {
+        _song = ChordProParser.Parse(text);
+        _musical = MusicalTimeline.Build(_song);
+        ApplyScrollRate();
+        var offset = SongScroller.Offset;
+        RenderSong();
+        SongScroller.UpdateLayout();
+        SongScroller.Offset = offset;
+        RefreshChordButtons();
+        UpdateEditorState();
+    }
+
+    private void UpdateEditorState()
+    {
+        var dirty = IsDirty;
+        var name = _song?.Title ?? (_path is null ? null : Path.GetFileNameWithoutExtension(_path));
+        Title = (dirty ? "• " : "") + (name is null ? "ChordPro Viewer" : $"{name} — ChordPro Viewer");
+        EditorTitle.Text = _path is null ? "" : Path.GetFileName(_path) + (dirty ? "  (edited)" : "");
+        SaveButton.IsEnabled = dirty || _changedOnDisk;
+        RevertButton.IsEnabled = dirty || _changedOnDisk;
+    }
+
+    private void OnSaveEditsClick(object? sender, RoutedEventArgs e) => _ = SaveEditsAsync();
+
+    /// <summary>Writes the editor's text to the file; false if it wasn't saved.</summary>
+    private async Task<bool> SaveEditsAsync()
+    {
+        if (!_editing || _path is null)
+            return false;
+        if (_changedOnDisk)
+        {
+            var answer = await ChoiceDialog.AskAsync(this, $"{Path.GetFileName(_path)} changed on disk while you were editing it.",
+                "Saving replaces those changes with yours. Revert loads the version on disk instead.", "Save Anyway", "Cancel");
+            if (answer != "Save Anyway")
+                return false;
+        }
+        var text = EditorBox.Text ?? "";
+        try
+        {
+            SongFile.Write(_path, text, _fileFormat);
+            _loadedText = File.ReadAllText(_path); // so the file watcher doesn't treat our save as someone else's
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"Could not save {Path.GetFileName(_path)}: {ex.Message}";
+            return false;
+        }
+        _savedText = text;
+        _changedOnDisk = false;
+        PreviewEdits();
+        UpdateEditorState();
+        RefreshRecentList();
+        StatusText.Text = $"Saved {Path.GetFileName(_path)} at {DateTime.Now:t}";
+        return true;
+    }
+
+    private void OnRevertEditsClick(object? sender, RoutedEventArgs e)
+    {
+        LoadEditor();
+        StatusText.Text = $"Reverted to the saved {Path.GetFileName(_path)}";
+    }
+
+    // Before unsaved edits would be lost: Save, Don't Save, or Cancel (false: stay as you are).
+    private async Task<bool> ConfirmKeepOrDiscardEditsAsync()
+    {
+        if (!IsDirty)
+            return true;
+        var name = _song?.Title ?? Path.GetFileNameWithoutExtension(_path);
+        var answer = await ChoiceDialog.AskAsync(this, $"Save changes to “{name}”?",
+            "Your changes will be lost if you don't save them.", "Save", "Don't Save", "Cancel");
+        switch (answer)
+        {
+            case "Save":
+                return await SaveEditsAsync();
+            case "Don't Save":
+                _settingEditorText = true;
+                EditorBox.Text = _savedText;
+                _settingEditorText = false;
+                UpdateEditorState();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // One button per chord already in the song, to insert it at the cursor.
+    private void RefreshChordButtons()
+    {
+        var chords = _song?.ChordUsages().Distinct().Take(30).ToList() ?? [];
+        if (chords.SequenceEqual(_chordButtonChords))
+            return;
+        _chordButtonChords = chords;
+        ChordButtons.Children.Clear();
+        foreach (var chord in chords)
+        {
+            var button = new Button { Content = chord, Padding = new Thickness(8, 2), Focusable = false };
+            button.Click += (_, _) => InsertChord(chord);
+            ChordButtons.Children.Add(button);
+        }
+    }
+
+    private void InsertChord(string chord)
+    {
+        var text = EditorBox.Text ?? "";
+        var at = Math.Clamp(EditorBox.CaretIndex, 0, text.Length);
+        var insert = $"[{chord}]";
+        EditorBox.Text = text.Insert(at, insert);
+        EditorBox.CaretIndex = at + insert.Length;
+        EditorBox.Focus();
+    }
+
+    private void OnInsertChordClick(object? sender, RoutedEventArgs e)
+    {
+        var chord = (ChordEntry.Text ?? "").Trim().Trim('[', ']').Trim();
+        if (chord.Length == 0)
+            return;
+        InsertChord(chord);
+        ChordEntry.Text = "";
+    }
+
+    private void OnChordEntryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            OnInsertChordClick(sender, e);
+            e.Handled = true;
+        }
+    }
+
     // ---- Setlists ----------------------------------------------------------------------------
 
     private void RefreshSetlist()
@@ -1609,6 +1876,24 @@ public partial class MainWindow : Window
             next += direction;
         if (next >= 0 && next < _setlist.Songs.Count)
             LoadFile(_setlist.Songs[next]);
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!_closeConfirmed && IsDirty)
+        {
+            e.Cancel = true;
+            _ = ConfirmCloseAsync();
+        }
+        base.OnClosing(e);
+    }
+
+    private async Task ConfirmCloseAsync()
+    {
+        if (!await ConfirmKeepOrDiscardEditsAsync())
+            return;
+        _closeConfirmed = true;
+        Close();
     }
 
     protected override void OnClosed(EventArgs e)

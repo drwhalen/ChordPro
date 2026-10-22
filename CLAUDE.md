@@ -4,8 +4,8 @@ Guidance for working in this repository. See README.md for the user-facing featu
 
 ## What this is
 
-ChordPro Viewer: a cross-platform .NET 10 desktop app (Avalonia 11.3) that displays ChordPro song files
-read-only, with transposition, capo, chord diagrams, themes, setlists, smart scrolling, a tuner and PDF
+ChordPro Viewer: a cross-platform .NET 10 desktop app (Avalonia 11.3) that displays ChordPro song files,
+with a built-in text editor and live preview, transposition, capo, chord diagrams, themes, setlists, smart scrolling, a tuner and PDF
 export. The developer works on macOS (Apple Silicon); WPF/WinForms are not options.
 
 ## Commands
@@ -24,7 +24,8 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
 ## Layout
 
 - `src/ChordPro.Core` — all logic that doesn't need a UI, and everything that has unit tests:
-  - `ChordProParser`, `Song` (model), `ChordTransposer` (also written/sounding keys), `Setlist`
+  - `ChordProParser`, `Song` (model), `SongFile` (read/write keeping line endings and BOM),
+    `ChordTransposer` (also written/sounding keys), `Setlist`
     (incl. LivePrompter `.txt` setlists), `SongLibrary` (scan, group, filter, key-convention guess),
     `LibraryCheck`, `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
@@ -40,7 +41,8 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `SmartScroller` + `ScrollTimelineBuilder` (scroll modes); `PdfExporter` (Skia vector PDF);
   `WindowTheme` (recolors Fluent controls); `ThemeEditorWindow`, `TunerWindow`, `ChordPopup`,
   `ChordDiagram`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
-  on-device) + `SpeechModel` (one-time model download); `AppSettings` (JSON).
+  on-device) + `SpeechModel` (one-time model download); `ChoiceDialog` (Save / Don't Save / Cancel);
+  `AppSettings` (JSON).
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
 - `samples/` — `amazing-grace.cho` (timed markers), `morning-road.cho` (musical bars, capo, `{define}`),
   `sample.setlist`. Song lyrics in samples must be public domain or original.
@@ -84,6 +86,9 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `FluentTheme` instance instead. `Palettes` only accepts the Light and Dark keys.
 - `x:Name` on a `Flyout` generates no field (it's not a control); name the owning button instead.
 - `TextBlock` drops trailing spaces when measuring, so lyric cells use non-breaking spaces.
+- Every way of opening a song goes through `MainWindow.LoadFile`, which asks about unsaved edits
+  first (it's `async void`, but loads synchronously when there's nothing to ask), then `LoadSong`.
+  Saving sets `_loadedText` so the file watcher doesn't treat the app's own save as an outside change.
 - macOS `FileSystemWatcher` sends spurious events when watching starts; auto-reload compares file text
   before re-rendering.
 - `Avalonia.Skia.Helpers.DrawingContextHelper.RenderAsync` overwrites the canvas matrix, so the PDF is

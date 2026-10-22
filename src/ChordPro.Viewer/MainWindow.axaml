@@ -66,6 +66,7 @@
                     <ToggleButton x:Name="SidebarToggle" Content="Songs" Click="OnSidebarToggleClick" ToolTip.Tip="Show or hide the song list" />
                     <Button Content="Open…" Click="OnOpenClick" />
                     <Button Content="PDF…" Click="OnExportPdfClick" ToolTip.Tip="Save as PDF to print or share" />
+                    <ToggleButton x:Name="EditToggle" Content="Edit" Click="OnEditToggleClick" ToolTip.Tip="Edit the song's text, with a live preview (⌘/Ctrl+E)" />
                     <Button Content="Tuner" Click="OnTunerClick" ToolTip.Tip="Tune your instrument with the microphone (⌘/Ctrl+T)" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -206,6 +207,33 @@
                     </DockPanel>
                 </TabItem>
             </TabControl>
+        </Border>
+
+        <!-- The song's text, editable, beside a live preview of it. -->
+        <Border x:Name="EditorPane" DockPanel.Dock="Right" Width="460" IsVisible="False"
+                BorderThickness="1,0,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <DockPanel Margin="10,8,10,10">
+                <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock x:Name="EditorTitle" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button x:Name="SaveButton" Content="Save" Classes="accent" Click="OnSaveEditsClick" ToolTip.Tip="Save the file (⌘/Ctrl+S)" />
+                            <Button x:Name="RevertButton" Content="Revert" Click="OnRevertEditsClick" ToolTip.Tip="Throw away changes since the last save" />
+                            <Button Content="Done" Click="OnEditToggleClick" ToolTip.Tip="Close the editor" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Classes="label" FontSize="12" Text="Insert a chord at the cursor" />
+                    <WrapPanel x:Name="ChordButtons" Classes="buttons" />
+                    <Grid ColumnDefinitions="*,6,Auto">
+                        <TextBox x:Name="ChordEntry" Watermark="Another chord, e.g. Cadd9" KeyDown="OnChordEntryKeyDown" />
+                        <Button Grid.Column="2" Content="Insert" Click="OnInsertChordClick" />
+                    </Grid>
+                </StackPanel>
+                <TextBox x:Name="EditorBox" AcceptsReturn="True" TextWrapping="NoWrap" FontSize="14"
+                         FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         TextChanged="OnEditorTextChanged" />
+            </DockPanel>
         </Border>
 
         <Panel>

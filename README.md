@@ -44,6 +44,7 @@ Gatekeeper warnings, sign it with an Apple Developer ID certificate (hardened ru
 | **Tap a chord** | Click any chord, in the lyrics or the diagrams, to see its fingering. ◀ ▶ page through alternatives: the song's own `{define}` shape if it has one, the standard shape, then movable shapes up the neck. |
 | **Theme** | System (follows light/dark), Day, Night, three high-contrast themes (black on white, white on black, yellow on black) and an all-red Night vision theme for dark stages. **New theme…** opens an editor with color pickers, a live preview and WCAG contrast ratings (7:1 and up is high contrast); your themes are saved and can be edited or deleted. Themes other than Day/Night recolor the whole window, not just the song. |
 | **Stage** | Full screen, larger text, and two columns on wide screens. When the song is in the setlist, the next song and its key show in the corner ("Next: Set 2 · Bike (G)"). Esc to exit. |
+| **Edit** | Edit the song's text beside it, with the song re-rendered as you type. Buttons insert the song's chords (or any other) at the cursor. **Save** keeps the file's own line endings and encoding, so LivePrompter and other apps see only your edits; **Revert** goes back to the saved file. Opening another song, leaving the editor or quitting with unsaved changes asks Save / Don't Save / Cancel, and a file changed on disk while you edit (by sync or another app) is never overwritten without asking. |
 | **PDF…** | Save a print-ready PDF (Letter or A4 by region) and open it in your PDF viewer to print. |
 | **Tuner** | A chromatic tuner using the microphone: the note, a cents needle (green within ±5 cents), "tune up / tune down", the frequency, and your instrument's strings (guitar EADGBE or ukulele GCEA) with the matching one highlighted. The A4 reference is adjustable (440 Hz by default). |
 
@@ -57,7 +58,7 @@ It also:
 - reloads the song when it is saved in another editor, keeping your place;
 - opens songs, setlists or a library folder dropped onto the window.
 
-Shortcuts: ⌘/Ctrl+O open, ⌘/Ctrl+P PDF, ⌘/Ctrl+T tuner, ⌘/Ctrl +/− text size, Space start/stop scrolling (page down in manual mode),
+Shortcuts: ⌘/Ctrl+O open, ⌘/Ctrl+E edit, ⌘/Ctrl+S save, ⌘/Ctrl+P PDF, ⌘/Ctrl+T tuner, ⌘/Ctrl +/− text size, Space start/stop scrolling (page down in manual mode),
 Page Up/Down turn pages, ← → setlist, Esc leave stage mode.
 
 ## Timing markup for scrolling
