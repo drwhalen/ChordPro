@@ -6,6 +6,23 @@ public sealed record Instrument(string Name, IReadOnlyList<int> Tuning, bool Bas
     public static Instrument Guitar { get; } = new("Guitar", [40, 45, 50, 55, 59, 64], BassMustBeRoot: true); // E A D G B E
     public static Instrument Ukulele { get; } = new("Ukulele", [67, 60, 64, 69], BassMustBeRoot: false);     // G C E A (re-entrant)
 
+    // Alternate guitar tunings: the shapes change, so they get their own diagrams.
+    public static Instrument GuitarDropD { get; } = new("Guitar (Drop D)", [38, 45, 50, 55, 59, 64], BassMustBeRoot: true); // D A D G B E
+    public static Instrument GuitarOpenG { get; } = new("Guitar (Open G)", [38, 43, 50, 55, 59, 62], BassMustBeRoot: true); // D G D G B D
+    public static Instrument GuitarDadgad { get; } = new("Guitar (DADGAD)", [38, 45, 50, 55, 57, 62], BassMustBeRoot: true); // D A D G A D
+
+    /// <summary>A ukulele with the G string an octave down (linear rather than re-entrant): the same shapes, a fuller bass.</summary>
+    public static Instrument UkuleleLowG { get; } = new("Ukulele (low G)", [55, 60, 64, 69], BassMustBeRoot: false); // G C E A
+
+    /// <summary>The baritone ukulele, tuned like a guitar's top four strings.</summary>
+    public static Instrument BaritoneUkulele { get; } = new("Baritone ukulele", [50, 55, 59, 64], BassMustBeRoot: false); // D G B E
+
+    /// <summary>The mandolin: four pairs of strings tuned in fifths, each pair played as one.</summary>
+    public static Instrument Mandolin { get; } = new("Mandolin", [55, 62, 69, 76], BassMustBeRoot: false) // G D A E
+    {
+        DoubledStrings = [0, 1, 2, 3],
+    };
+
     // A mountain dulcimer's frets (and the Seagull Merlin's) are diatonic: a major scale with a flat
     // seventh from the open string, plus the extra 6½ fret ("6+") that gives the major seventh.
     private static readonly int[] DiatonicFrets = [0, 2, 4, 5, 7, 9, 10, 11, 12, 14, 16, 17, 19, 21];
@@ -30,10 +47,19 @@ public sealed record Instrument(string Name, IReadOnlyList<int> Tuning, bool Bas
     /// <summary>A three-string dulcimer tuned D-A-D (as D-A-DD with a single melody string).</summary>
     public static Instrument DulcimerDAD { get; } = Diatonic("Dulcimer (D-A-D)", [50, 57, 62], pairedMelody: false); // D3 A3 D4
 
+    /// <summary>A dulcimer tuned D-G-D, popular for chords: the bass and melody strings an octave apart, a G between.</summary>
+    public static Instrument DulcimerDGD { get; } = Diatonic("Dulcimer (D-G-D)", [50, 55, 62], pairedMelody: false); // D3 G3 D4
+
     /// <summary>The Seagull Merlin in G, tuned G-D-G-G: D-A-DD a fourth higher, so the same shapes play a fourth up.</summary>
     public static Instrument MerlinGDgg { get; } = Diatonic("Merlin (G-D-GG)", [55, 62, 67], pairedMelody: true); // G3 D4 G4 G4
 
-    public static IReadOnlyList<Instrument> All { get; } = [Guitar, Ukulele, DulcimerDAdd, DulcimerDAA, DulcimerDAD, MerlinGDgg];
+    public static IReadOnlyList<Instrument> All { get; } =
+    [
+        Guitar, GuitarDropD, GuitarOpenG, GuitarDadgad,
+        Ukulele, UkuleleLowG, BaritoneUkulele,
+        Mandolin,
+        DulcimerDAdd, DulcimerDAA, DulcimerDAD, DulcimerDGD, MerlinGDgg,
+    ];
 
     /// <summary>The instrument with this name (as saved in settings), or the guitar.</summary>
     public static Instrument Find(string? name) => name switch

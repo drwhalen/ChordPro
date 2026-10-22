@@ -155,12 +155,24 @@ public sealed partial class SongRenderer(RenderOptions options)
             .ToList();
 
         var panel = new WrapPanel();
+        var instrument = options.Instrument;
+        var unplayable = new List<string>();
+        var partial = new List<string>();
         foreach (var (written, name) in chords)
         {
             var defined = DefinedShape(song, written, name);
-            var shape = defined ?? ChordShapeFinder.Find(name, options.Instrument);
+            var shape = defined ?? ChordShapeFinder.Find(name, instrument);
             if (shape is null)
+            {
+                if (ChordName.TryParse(name) is not null)
+                    unplayable.Add(name);
                 continue;
+            }
+            if (defined is null && ChordShapeFinder.MissingTones(name, shape, instrument) is { Count: > 0 } missing)
+            {
+                var flats = name.Length > 1 && name[1] == 'b';
+                partial.Add($"{name} (no {string.Join(" or ", missing.Select(t => ChordTransposer.NoteName(t, flats)))})");
+            }
 
             var diagram = new ChordDiagram(name, shape, FontSize, options.Instrument)
             {
@@ -172,7 +184,33 @@ public sealed partial class SongRenderer(RenderOptions options)
             panel.Children.Add(diagram);
         }
 
-        return panel.Children.Count == 0 ? null : panel;
+        // Say which chords this instrument can't play as written, so it's no surprise mid-song.
+        var notes = new List<string>();
+        if (unplayable.Count > 0)
+            notes.Add(instrument.IsDiatonic
+                ? $"Not on the {instrument.Name} frets: {string.Join(", ", unplayable)}"
+                : $"No {instrument.Name} fingering for {string.Join(", ", unplayable)}");
+        if (partial.Count > 0)
+            notes.Add($"Played without a note the frets don't have: {string.Join(", ", partial)}");
+        if (notes.Count == 0)
+            return panel.Children.Count == 0 ? null : panel;
+
+        var stack = new StackPanel { Spacing = FontSize * 0.4 };
+        foreach (var note in notes)
+        {
+            stack.Children.Add(new Border
+            {
+                Background = Palette.CommentBackground,
+                BorderBrush = Palette.Chord,
+                BorderThickness = new Thickness(3, 0, 0, 0),
+                Padding = new Thickness(FontSize * 0.5, FontSize * 0.25),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = Text("⚠ " + note, FontSize * 0.85, wrap: true),
+            });
+        }
+        if (panel.Children.Count > 0)
+            stack.Children.Add(panel);
+        return stack;
     }
 
     // Splits sections across columns so each holds roughly the same number of lines.
@@ -324,9 +362,9 @@ public sealed partial class SongRenderer(RenderOptions options)
     private string DisplayChord(string written) =>
         TransposeChord(options.SimplifyChords ? ChordSimplifier.Simplify(written) : written);
 
-    // A {define} applies to the chord exactly as written, on a six-string guitar.
+    // A {define} applies to the chord exactly as written, on a guitar in standard tuning.
     private ChordShape? DefinedShape(Song song, string written, string shown) =>
-        shown == written && options.Instrument.StringCount == 6 &&
+        shown == written && options.Instrument == Instrument.Guitar &&
         song.ChordDefinitions.TryGetValue(written, out var defined) && defined.Frets.Count == 6
             ? defined
             : null;

@@ -7,6 +7,10 @@ public static partial class ChordTransposer
 {
     private static readonly string[] SharpNotes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     private static readonly string[] FlatNotes = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
+    /// <summary>A note's name from its pitch class (0 = C), with sharps or flats.</summary>
+    public static string NoteName(int pitchClass, bool preferFlats) =>
+        (preferFlats ? FlatNotes : SharpNotes)[((pitchClass % 12) + 12) % 12];
     private static readonly int[] LetterSemitones = [9, 11, 0, 2, 4, 5, 7]; // A B C D E F G
 
     // Keys conventionally written with flats. (F#/Gb could go either way; F# is more usual on guitar.)

@@ -139,6 +139,34 @@ public class ChordShapeTests
         Assert.Equal([2], Instrument.DulcimerDAdd.DoubledStrings);
     }
 
+    [Theory]
+    [InlineData("Mandolin", "G", "0023")]
+    [InlineData("Mandolin", "D", "2002")]
+    [InlineData("Baritone ukulele", "G", "0003")]
+    [InlineData("Baritone ukulele", "C", "2010")]
+    [InlineData("Ukulele (low G)", "C", "0003")]
+    [InlineData("Guitar (Drop D)", "E", "222100")]
+    [InlineData("Guitar (Open G)", "C", "x55555")]
+    [InlineData("Dulcimer (D-G-D)", "D", "0-1-2")]
+    public void FindsShapesInOtherTunings(string instrument, string chord, string shape)
+    {
+        var tuning = Instrument.Find(instrument);
+        Assert.Equal(instrument, tuning.Name);
+        Assert.Equal(shape, tuning.Notation(ChordShapeFinder.Find(chord, tuning)!));
+    }
+
+    [Fact]
+    public void SaysWhichNotesAShapeLeavesOut()
+    {
+        var dulcimer = Instrument.DulcimerDAdd;
+        Assert.Equal([8], ChordShapeFinder.MissingTones("E", ChordShapeFinder.Find("E", dulcimer)!, dulcimer)); // G#
+        Assert.Empty(ChordShapeFinder.MissingTones("G", ChordShapeFinder.Find("G", dulcimer)!, dulcimer));
+        // Leaving out the fifth of a big chord is normal, not missing.
+        Assert.Empty(ChordShapeFinder.MissingTones("G7", ChordShape.Parse("320001"), Instrument.Guitar));
+        Assert.Equal("G#", ChordTransposer.NoteName(8, preferFlats: false));
+        Assert.Equal("Ab", ChordTransposer.NoteName(8, preferFlats: true));
+    }
+
     [Fact]
     public void FindsInstrumentsBySavedName()
     {

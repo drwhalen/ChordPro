@@ -55,6 +55,21 @@ public static class ChordShapeFinder
         return fretted.Count == 0 ? 0 : fretted.Max() - fretted.Min();
     }
 
+    /// <summary>
+    /// The chord tones the best fingering of <paramref name="chordName"/> leaves out, beyond those any
+    /// voicing may drop (the fifth of a big chord): on a dulcimer, the third it plays root and fifth
+    /// without. Empty when the chord is complete, or isn't a chord.
+    /// </summary>
+    public static IReadOnlyList<int> MissingTones(string chordName, ChordShape shape, Instrument instrument)
+    {
+        if (ChordName.TryParse(chordName) is not { } chord || shape.Frets.Count != instrument.StringCount)
+            return [];
+        var notes = shape.Frets
+            .Select((fret, i) => fret < 0 ? -1 : (instrument.Tuning[i] + instrument.Semitones(fret)) % 12)
+            .ToHashSet();
+        return [.. RequiredTones(chord, instrument).Where(tone => !notes.Contains(tone)).Order()];
+    }
+
     /// <summary>All playable fingerings, best first.</summary>
     public static IReadOnlyList<ChordShape> FindAll(ChordName chord, Instrument instrument)
     {
