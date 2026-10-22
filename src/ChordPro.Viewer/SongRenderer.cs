@@ -14,7 +14,7 @@ namespace ChordPro.Viewer;
 public sealed record SongPalette(IBrush Background, IBrush Text, IBrush MutedText, IBrush Chord,
     IBrush ChorusBar, IBrush CommentBackground, IBrush CommentBox)
 {
-    /// <summary>Printing always uses the Day colours: dark text on white paper.</summary>
+    /// <summary>Printing always uses the Day colors: dark text on white paper.</summary>
     public static SongPalette Print { get; } = FromTheme(SongTheme.Day);
 
     public static SongPalette FromTheme(SongTheme theme)

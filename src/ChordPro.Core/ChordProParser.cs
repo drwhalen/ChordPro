@@ -6,8 +6,8 @@ namespace ChordPro.Core;
 /// <summary>
 /// Parses text in ChordPro format (https://www.chordpro.org/chordpro/) into a <see cref="Song"/>.
 /// Supports metadata, comments, chorus/verse/bridge/tab/grid sections and the {chorus} recall
-/// directive. Unrecognised directives (fonts, page layout…) are ignored.
-/// A plain line ending in a colon (<c>Verse 1:</c>, <c>Intro:</c>) starts a labelled section, the way
+/// directive. Unrecognized directives (fonts, page layout…) are ignored.
+/// A plain line ending in a colon (<c>Verse 1:</c>, <c>Intro:</c>) starts a labeled section, the way
 /// LivePrompter marks sections.
 /// </summary>
 public static partial class ChordProParser

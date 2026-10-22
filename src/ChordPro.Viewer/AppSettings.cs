@@ -16,7 +16,7 @@ public sealed class SongSettings
     public string? ScrollMode { get; set; }
     /// <summary>Tempo override for musical scrolling, in BPM.</summary>
     public double? Tempo { get; set; }
-    /// <summary>How many times the song was played (scrolled or shown in stage mode), for favouring familiar songs in a set.</summary>
+    /// <summary>How many times the song was played (scrolled or shown in stage mode), for favoring familiar songs in a set.</summary>
     public int Plays { get; set; }
     /// <summary>The singer marked this song, in its transposed key, as sitting well for their voice.</summary>
     public bool FitsVoice { get; set; }

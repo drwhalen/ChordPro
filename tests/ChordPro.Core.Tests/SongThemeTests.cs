@@ -8,7 +8,7 @@ public class SongThemeTests
     [InlineData("#000000", "#FFFFFF", 21)]
     [InlineData("#FFFFFF", "#000000", 21)]
     [InlineData("#777777", "#777777", 1)]
-    [InlineData("#767676", "#FFFFFF", 4.54)] // the classic "just passes AA" grey
+    [InlineData("#767676", "#FFFFFF", 4.54)] // the classic "just passes AA" gray
     public void ComputesWcagContrastRatio(string foreground, string background, double expected) =>
         Assert.Equal(expected, SongTheme.ContrastRatio(foreground, background), precision: 2);
 

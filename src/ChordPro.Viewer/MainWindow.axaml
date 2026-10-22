@@ -21,8 +21,8 @@
             <Setter Property="MinWidth" Value="40" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
-        <!-- Themes that recolour the controls: mark the selected list item with a bar, since an
-             accent-coloured fill would hide its text. -->
+        <!-- Themes that recolor the controls: mark the selected list item with a bar, since an
+             accent-colored fill would hide its text. -->
         <Style Selector="Window.recolored ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />

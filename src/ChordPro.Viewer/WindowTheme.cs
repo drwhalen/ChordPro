@@ -8,12 +8,12 @@ namespace ChordPro.Viewer;
 
 /// <summary>
 /// Applies a theme to the app's controls (toolbar, lists, dialogs). Day and Night use the standard
-/// light and dark styles; other themes recolour the Fluent palette so the whole window matches,
+/// light and dark styles; other themes recolor the Fluent palette so the whole window matches,
 /// which matters for high contrast and for keeping a night-vision stage fully red.
 /// </summary>
 public static class WindowTheme
 {
-    /// <summary>True for themes that recolour the controls (everything except System, Day and Night).</summary>
+    /// <summary>True for themes that recolor the controls (everything except System, Day and Night).</summary>
     public static bool RecolorsControls(SongTheme? theme) =>
         theme is not null && theme.Name != SongTheme.Day.Name && theme.Name != SongTheme.Night.Name;
 
@@ -53,7 +53,7 @@ public static class WindowTheme
         palette.BaseHigh = palette.BaseMediumHigh = text;
         palette.BaseMedium = palette.BaseMediumLow = muted;
         palette.BaseLow = surface;
-        // Checked toggles and check boxes are drawn inverted (text colour fill, background colour
+        // Checked toggles and check boxes are drawn inverted (text color fill, background color
         // glyph), the usual high-contrast convention. List selection is restyled in MainWindow.
         palette.ChromeWhite = background;
         palette.ChromeAltLow = text;

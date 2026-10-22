@@ -8,7 +8,7 @@ public class LyricAlignerTests
     private static readonly Song Grace = ChordProParser.ParseFile(Path.Combine(SamplesFolder(), "amazing-grace.cho"));
 
     [Fact]
-    public void FollowsRecognisedSpeechThroughTheVerses()
+    public void FollowsRecognizedSpeechThroughTheVerses()
     {
         // What Whisper (base.en) heard in overlapping 4-second windows of the two verses read aloud,
         // mistakes included: "now I'm found" for "now am found", "Twas great" for "Twas grace".

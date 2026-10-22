@@ -13,7 +13,7 @@ public static partial class ChordSimplifier
     [GeneratedRegex(@"^(?<root>[A-G][#b♯♭]?)")]
     private static partial Regex RootRegex();
 
-    /// <summary>The simplified chord, or <paramref name="chord"/> unchanged if it isn't a recognisable chord.</summary>
+    /// <summary>The simplified chord, or <paramref name="chord"/> unchanged if it isn't a recognizable chord.</summary>
     public static string Simplify(string chord)
     {
         if (ChordName.TryParse(chord) is not { } parsed)

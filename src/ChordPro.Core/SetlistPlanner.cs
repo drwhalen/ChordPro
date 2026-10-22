@@ -7,7 +7,7 @@ public sealed record PlannedSong(SongInfo Song, string? Key, double? Tempo, int 
 public sealed record SetlistStep(double Score, string Key, string? Tempo, string? Capo, string? Artist)
 {
     /// <summary>
-    /// Good, fine or a bump: for colouring the step. Capo and artist are usually fine, so the bars sit
+    /// Good, fine or a bump: for coloring the step. Capo and artist are usually fine, so the bars sit
     /// high enough that a far key or a tempo lurch shows as a bump on its own.
     /// </summary>
     public string Rating => Score >= 0.8 ? "good" : Score >= 0.6 ? "fine" : "bump";
@@ -24,7 +24,7 @@ public sealed record SetlistRequest(
     IReadOnlyList<PlannedSong> MustInclude,
     int Length,
     bool NearMustIncludeKeys = true,
-    bool FavourPlayed = false,
+    bool FavorPlayed = false,
     int Variation = 0,
     VoiceRange? Voice = null);
 
@@ -132,7 +132,7 @@ public static class SetlistPlanner
             return (0.92, $"{label}: relative {(bMinor ? "minor" : "major")}");
         if (up == 0)
             return (0.6, $"{label}: same root, {(bMinor ? "minor" : "major")} now");
-        // Neighbours on the circle of fifths, compared through the relative major.
+        // Neighbors on the circle of fifths, compared through the relative major.
         var (ma, mb) = (aMinor ? (a + 3) % 12 : a, bMinor ? (b + 3) % 12 : b);
         var fifths = Math.Min((mb * 7 - ma * 7 + 120) % 12, (ma * 7 - mb * 7 + 120) % 12);
         if (aMinor == bMinor && up is 1 or 2)
@@ -214,7 +214,7 @@ public static class SetlistPlanner
             var target = x < 0.55 ? 0.7 - 0.6 * x : 0.37 + 1.15 * (x - 0.55);
             var shape = 1 - Math.Abs(_energy[song] - Math.Clamp(target, 0, 1));
             var fit = VoiceWeight * _voice[song] + ShapeWeight * shape + CollectionWeight * _collection[song];
-            if (_request.FavourPlayed)
+            if (_request.FavorPlayed)
                 fit += PlayedWeight * _played[song];
             return fit;
         }

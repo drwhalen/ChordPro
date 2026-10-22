@@ -9,7 +9,7 @@ namespace ChordPro.Core.Scrolling;
 public sealed class TempoTracker
 {
     private const int FramesPerSecond = 100;
-    private const int HistoryFrames = 8 * FramesPerSecond;     // analyse the last 8 seconds
+    private const int HistoryFrames = 8 * FramesPerSecond;     // analyze the last 8 seconds
     private const int MinimumFrames = 4 * FramesPerSecond;     // need 4 seconds before estimating
     private const int AnalysisInterval = FramesPerSecond / 2;  // re-estimate twice a second
     private const double MinTempo = 50, MaxTempo = 200;
@@ -118,9 +118,9 @@ public sealed class TempoTracker
         if (Confidence < MinConfidence)
             return;
 
-        // Refine between frames with a parabola through the peak and its neighbours.
-        var (left, centre, right) = (correlations[bestLag - 1], correlations[bestLag], correlations[bestLag + 1]);
-        var curvature = left - 2 * centre + right;
+        // Refine between frames with a parabola through the peak and its neighbors.
+        var (left, center, right) = (correlations[bestLag - 1], correlations[bestLag], correlations[bestLag + 1]);
+        var curvature = left - 2 * center + right;
         var offset = curvature < 0 ? Math.Clamp(0.5 * (left - right) / curvature, -0.5, 0.5) : 0;
         var estimate = 60.0 * FramesPerSecond / (bestLag + offset);
 

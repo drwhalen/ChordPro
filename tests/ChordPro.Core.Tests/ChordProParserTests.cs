@@ -80,7 +80,7 @@ public class ChordProParserTests
     }
 
     [Fact]
-    public void PlainLinesEndingInAColonStartLabelledSections()
+    public void PlainLinesEndingInAColonStartLabeledSections()
     {
         var song = ChordProParser.Parse("""
             {title: Heads}

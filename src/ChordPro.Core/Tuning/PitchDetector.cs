@@ -9,7 +9,7 @@ public sealed class PitchDetector
     public const double MinFrequency = 60;    // below a guitar's low E (82 Hz), allowing for drop tunings
     public const double MaxFrequency = 1200;  // well above a ukulele's A string (440 Hz)
 
-    private const double Threshold = 0.15;     // YIN's absolute threshold on the normalised difference
+    private const double Threshold = 0.15;     // YIN's absolute threshold on the normalized difference
     private const double MinLevel = 0.002;     // RMS below this is treated as silence
 
     private readonly int _sampleRate;
@@ -59,7 +59,7 @@ public sealed class PitchDetector
             _difference[lag] = sum;
         }
 
-        // Cumulative mean normalised difference d'(τ) = d(τ)·τ / Σ₁..τ d.
+        // Cumulative mean normalized difference d'(τ) = d(τ)·τ / Σ₁..τ d.
         _difference[0] = 1;
         var running = 0.0;
         for (var lag = 1; lag <= _maxLag + 1; lag++)
@@ -84,11 +84,11 @@ public sealed class PitchDetector
         if (best < 0)
             return null;
 
-        // Refine between samples with a parabola through the minimum and its neighbours.
-        var (left, centre, right) = (_difference[best - 1], _difference[best], _difference[best + 1]);
-        var curvature = left - 2 * centre + right;
+        // Refine between samples with a parabola through the minimum and its neighbors.
+        var (left, center, right) = (_difference[best - 1], _difference[best], _difference[best + 1]);
+        var curvature = left - 2 * center + right;
         var offset = curvature > 0 ? Math.Clamp(0.5 * (left - right) / curvature, -0.5, 0.5) : 0;
 
-        return (_sampleRate / (best + offset), Math.Clamp(1 - centre, 0, 1));
+        return (_sampleRate / (best + offset), Math.Clamp(1 - center, 0, 1));
     }
 }

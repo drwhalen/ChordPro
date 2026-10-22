@@ -135,7 +135,7 @@ public sealed class TunerWindow : Window
             }
         }
 
-        _timer = new DispatcherTimer(UpdateInterval, DispatcherPriority.Background, (_, _) => Analyse());
+        _timer = new DispatcherTimer(UpdateInterval, DispatcherPriority.Background, (_, _) => Analyze());
         _timer.Start();
     }
 
@@ -157,7 +157,7 @@ public sealed class TunerWindow : Window
         }
     }
 
-    private void Analyse()
+    private void Analyze()
     {
         if (_detector is null)
             return;

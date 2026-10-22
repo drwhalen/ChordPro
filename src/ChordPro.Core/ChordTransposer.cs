@@ -40,7 +40,7 @@ public static partial class ChordTransposer
 
     /// <summary>
     /// Whether chords should be spelled with flats after transposing a song in <paramref name="key"/>,
-    /// or null if the key is missing or unrecognised.
+    /// or null if the key is missing or unrecognized.
     /// </summary>
     public static bool? PrefersFlats(string? key, int semitones)
     {

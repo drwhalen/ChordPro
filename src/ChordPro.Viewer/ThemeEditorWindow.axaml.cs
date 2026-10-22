@@ -28,7 +28,7 @@ public partial class ThemeEditorWindow : Window
         {cb: Boxed comment}
         """;
 
-    // The editable colours, their labels, and what each must stay readable against.
+    // The editable colors, their labels, and what each must stay readable against.
     private sealed record ColorRole(string Label, Func<SongTheme, string> Get, Action<SongTheme, string> Set,
         Func<SongTheme, string>? Against = null);
 
@@ -51,7 +51,7 @@ public partial class ThemeEditorWindow : Window
 
     public ThemeEditorWindow() : this(SongTheme.Day.Clone("Preview"), isNew: true, new HashSet<string>()) { }
 
-    /// <param name="theme">The theme to edit; a copy is edited, so cancelling leaves it unchanged.</param>
+    /// <param name="theme">The theme to edit; a copy is edited, so canceling leaves it unchanged.</param>
     /// <param name="isNew">Whether this is a new theme (which can't be deleted yet).</param>
     /// <param name="takenNames">Names already used by other themes.</param>
     public ThemeEditorWindow(SongTheme theme, bool isNew, IReadOnlySet<string> takenNames)
@@ -70,7 +70,7 @@ public partial class ThemeEditorWindow : Window
         foreach (var role in Roles)
             ColorRows.Children.Add(ColorRow(role));
 
-        // Comments put lyrics-coloured text on the highlight colour, so check that pair too.
+        // Comments put lyrics-colored text on the highlight color, so check that pair too.
         ColorRows.Children.Add(ContrastNote("Lyrics on comment highlight", t => t.Text, t => t.CommentBackground));
 
         UpdatePreview();

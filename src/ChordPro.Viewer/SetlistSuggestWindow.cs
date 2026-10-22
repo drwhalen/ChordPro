@@ -28,7 +28,7 @@ public sealed class SetlistSuggestWindow : Window
     private readonly ComboBox _length = new() { ItemsSource = new[] { 6, 8, 10, 12, 15, 20 }, SelectedItem = 12, MinWidth = 70 };
     private readonly ComboBox _from = new() { MinWidth = 180 };
     private readonly CheckBox _nearKeys = new() { Content = "Stay near my songs' keys", IsChecked = true };
-    private readonly CheckBox _favourPlayed = new() { Content = "Favour songs I play often" };
+    private readonly CheckBox _favorPlayed = new() { Content = "Favor songs I play often" };
     private readonly Button _suggest = new() { Content = "Suggest", Classes = { "accent" } };
     private readonly TextBlock _heading = new() { FontWeight = FontWeight.SemiBold, FontSize = 15 };
     private readonly TextBlock _summary = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
@@ -96,7 +96,7 @@ public sealed class SetlistSuggestWindow : Window
         ToolTip.SetTip(_nearKeys, voice.IsEmpty
             ? "Prefer keys near the songs in your setlist. Mark songs that sit well for your voice with “My key” and it learns your range."
             : "Prefer keys near the ones you marked with “My key” or transposed to, and those of the songs in your setlist");
-        var checks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { _nearKeys, _favourPlayed } };
+        var checks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { _nearKeys, _favorPlayed } };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 10), Children = { intro, options, checks, _suggest, _heading, _summary } };
         DockPanel.SetDock(top, Dock.Top);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0), Children = { _useButton, _saveButton, close } };
@@ -122,7 +122,7 @@ public sealed class SetlistSuggestWindow : Window
             .Select(_toPlanned)
             .ToList();
         var plan = SetlistPlanner.Plan(new SetlistRequest(pool, _picked, (int)(_length.SelectedItem ?? 12),
-            NearMustIncludeKeys: _nearKeys.IsChecked == true, FavourPlayed: _favourPlayed.IsChecked == true, Variation: _variation++,
+            NearMustIncludeKeys: _nearKeys.IsChecked == true, FavorPlayed: _favorPlayed.IsChecked == true, Variation: _variation++,
             Voice: _nearKeys.IsChecked == true ? _voice : null));
         _suggest.Content = "Try another";
         Show(plan, "Suggested set");
@@ -168,7 +168,7 @@ public sealed class SetlistSuggestWindow : Window
             if (i < plan.Steps.Count)
             {
                 var step = plan.Steps[i];
-                var colour = step.Rating switch { "good" => Good, "fine" => Fine, _ => Bump };
+                var color = step.Rating switch { "good" => Good, "fine" => Fine, _ => Bump };
                 _rows.Children.Add(new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -176,7 +176,7 @@ public sealed class SetlistSuggestWindow : Window
                     Margin = new Thickness(28, 2, 0, 0),
                     Children =
                     {
-                        new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = colour, VerticalAlignment = VerticalAlignment.Center },
+                        new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = color, VerticalAlignment = VerticalAlignment.Center },
                         Text(step.ToString(), muted: true, size: 12),
                     },
                 });

@@ -15,7 +15,7 @@ public sealed partial record ChordName(int Root, int Bass, IReadOnlyList<int> In
 
     /// <summary>
     /// Parses names such as <c>C</c>, <c>F#m7b5</c>, <c>Bbmaj9</c>, <c>Dsus4</c> or <c>G/B</c>.
-    /// Returns null for text that isn't a recognisable chord (e.g. "N.C.").
+    /// Returns null for text that isn't a recognizable chord (e.g. "N.C.").
     /// </summary>
     public static ChordName? TryParse(string name)
     {
@@ -37,7 +37,7 @@ public sealed partial record ChordName(int Root, int Bass, IReadOnlyList<int> In
         return (semitone + 12) % 12;
     }
 
-    // Intervals in semitones from the root. Recognises the usual triad prefixes, a 6/7/9/11/13
+    // Intervals in semitones from the root. Recognizes the usual triad prefixes, a 6/7/9/11/13
     // extension, and sus/add/altered-note modifiers; returns null if anything is left over.
     private static List<int>? ParseQuality(string quality)
     {

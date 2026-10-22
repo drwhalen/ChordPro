@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace ChordPro.Core.Themes;
 
 /// <summary>
-/// Colours for displaying a song, as <c>#RRGGBB</c> strings so themes can be saved as JSON.
+/// Colors for displaying a song, as <c>#RRGGBB</c> strings so themes can be saved as JSON.
 /// <see cref="Dark"/> picks the light or dark style for the rest of the window (toolbar, lists).
 /// </summary>
 public sealed class SongTheme
@@ -75,7 +75,7 @@ public sealed class SongTheme
     }
 
     /// <summary>
-    /// WCAG contrast ratio between two <c>#RRGGBB</c> colours, from 1 (identical) to 21 (black on
+    /// WCAG contrast ratio between two <c>#RRGGBB</c> colors, from 1 (identical) to 21 (black on
     /// white). 4.5 is the usual minimum for text and 7 the high-contrast (AAA) level.
     /// </summary>
     public static double ContrastRatio(string foreground, string background)
@@ -91,7 +91,7 @@ public sealed class SongTheme
     private static double RelativeLuminance(string hex)
     {
         if (!IsValidColor(hex))
-            throw new FormatException($"Expected a colour like #1A2B3C, got '{hex}'.");
+            throw new FormatException($"Expected a color like #1A2B3C, got '{hex}'.");
 
         double Channel(int index)
         {
