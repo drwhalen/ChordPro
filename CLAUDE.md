@@ -28,7 +28,10 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     `ChordTransposer` (also written/sounding keys), `Setlist`
     (incl. LivePrompter `.txt` setlists), `SongLibrary` (scan, group, filter, key-convention guess),
     `LibraryCheck`, `SetlistPlanner` (scores song-to-song steps and plans sets that flow), `SetLength`
-    (running time from `{duration}`), `EditorInsert` (the editor's Insert menu: sections, directive lines), `VoiceRange`
+    (running time from `{duration}`), `EditorInsert` (the editor's Insert menu: sections, directive lines, the key at the cursor),
+    `Chords/KeyChords` (the chords of a key, for the key companion), `Chords/SongFingerings` (writes a
+    chosen fingering as `{define}` or `{define-<selector>}`, see `Instrument.Selector`); a second `{key}`
+    parses to a `KeyChangeLine`, `VoiceRange`
     (comfortable keys learned from "My key" marks and transposes), `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,

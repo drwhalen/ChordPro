@@ -125,6 +125,12 @@ public partial class MainWindow : Window
         AddHandler(PointerMovedEvent, OnStagePointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         // Re-render the preview once typing pauses, not on every key.
         _previewTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => PreviewEdits());
+        // The key companion follows the cursor: the key can change part way through a song.
+        EditorBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.CaretIndexProperty && _editing)
+                RefreshKeyCompanion();
+        };
         // A converter or sync can write many files at once; rescan once they've settled.
         _libraryRescanTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) =>
         {
@@ -505,10 +511,50 @@ public partial class MainWindow : Window
             .Where(s => !s.Equals(tap.DefinedShape))
             .Select(s => (s, (string?)null)));
 
+        // A fingering is saved under the chord's name in the file, so only for a chord shown as written.
+        var asWritten = tap.Name == tap.Written;
+        Action<ChordShape>? use = asWritten && _path is not null ? shape => SaveFingering(tap.Written, shape) : null;
+        Action? forget = asWritten && tap.DefinedShape is not null && _path is not null ? () => SaveFingering(tap.Written, null) : null;
+        var cantUse = _path is null ? "Open a song file to save a fingering in it"
+            : asWritten ? null
+            : $"The song is transposed, capoed or simplified, so this isn't the {tap.Written} written in it; set it back to save a fingering";
+
         // One popup at a time: tapping another chord replaces it.
         _chordFlyout.Hide();
-        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _fontSize, SongPalette.FromTheme(CurrentTheme), CurrentInstrument);
+        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _fontSize, SongPalette.FromTheme(CurrentTheme), CurrentInstrument, use, forget, cantUse);
         _chordFlyout.ShowAt(tap.Anchor);
+    }
+
+    // Writes (or, with null, removes) the song's own fingering for a chord on the current
+    // instrument: into the editor when the song is being edited, so it's saved with the other
+    // edits, otherwise straight into the file.
+    private void SaveFingering(string chord, ChordShape? shape)
+    {
+        if (_path is null)
+            return;
+        _chordFlyout.Hide();
+        string Change(string text) => shape is null
+            ? SongFingerings.Remove(text, chord, CurrentInstrument)
+            : SongFingerings.Set(text, chord, shape, CurrentInstrument);
+        if (_editing)
+        {
+            SetEditorText(Change(EditorBox.Text ?? ""), EditorBox.CaretIndex, quiet: false);
+            PreviewEdits();
+            StatusText.Text = shape is null ? $"Using the usual {chord} (save to keep it)" : $"Using this {chord} fingering (save to keep it)";
+            return;
+        }
+        try
+        {
+            var (text, format) = SongFile.Read(_path);
+            SongFile.Write(_path, Change(text), format);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"Could not save the fingering: {ex.Message}";
+            return;
+        }
+        ReloadChangedFile();
+        StatusText.Text = shape is null ? $"Back to the usual {chord}" : $"Saved this {chord} fingering in the song";
     }
 
     private void OnCapoSuggestOpening(object? sender, EventArgs e)
@@ -1873,6 +1919,8 @@ public partial class MainWindow : Window
         }
         _changedOnDisk = false;
         SetEditorText(_savedText, 0);
+        _companionKey = "";   // a different song: show its key afresh
+        RefreshKeyCompanion();
         ShowSongText(_savedText);
         UpdateEditorState();
     }
@@ -1892,6 +1940,9 @@ public partial class MainWindow : Window
 
     private void OnEditorTextChanged(object? sender, TextChangedEventArgs e)
     {
+        // A {key} typed or changed: the companion follows (it's rebuilt only when the key differs).
+        if (_editing)
+            RefreshKeyCompanion();
         if (_settingEditorText)
             return;
         _previewTimer.Stop();
@@ -2037,6 +2088,66 @@ public partial class MainWindow : Window
         int? caretInLine = line == "{comment: }" ? line.Length - 1 : null;
         var (result, caret) = EditorInsert.Line(EditorBox.Text ?? "", EditorBox.CaretIndex, line, caretInLine);
         SetEditorText(result, caret, quiet: false);
+        EditorBox.Focus();
+    }
+
+    // ---- Key companion: the chords of the key at the cursor -------------------------------------
+
+    private string? _companionKey = "";
+
+    // Shows the chords of the key in force at the cursor; rebuilt only when that key changes.
+    private void RefreshKeyCompanion()
+    {
+        var text = EditorBox.Text ?? "";
+        var key = EditorInsert.KeyAt(text, EditorBox.CaretIndex);
+        if (key == _companionKey)
+            return;
+        _companionKey = key;
+        if (KeyChangeBox.ItemsSource is null)
+            KeyChangeBox.ItemsSource = KeyChords.AllKeys;
+
+        var chords = KeyChords.For(key);
+        var changes = EditorInsert.KeyCount(text) > 1;
+        KeyCompanionTitle.Text = chords is null
+            ? "Give the song a {key: …} to see the chords that go with it"
+            : $"In {chords.Key}{(changes ? " here" : "")}: tap a chord to insert it";
+        foreach (var (panel, list) in new[] { (KeyTriads, chords?.Triads), (KeySevenths, chords?.Sevenths), (KeyBorrowed, chords?.Borrowed) })
+        {
+            panel.Children.Clear();
+            panel.IsVisible = list is not null;
+            foreach (var chord in list ?? [])
+            {
+                var button = new Button
+                {
+                    Padding = new Thickness(8, 1),
+                    Focusable = false,
+                    Content = new StackPanel
+                    {
+                        Children =
+                        {
+                            new TextBlock { Text = chord.Numeral, FontSize = 10, Opacity = 0.6, HorizontalAlignment = HorizontalAlignment.Center },
+                            new TextBlock { Text = chord.Chord, HorizontalAlignment = HorizontalAlignment.Center },
+                        },
+                    },
+                };
+                ToolTip.SetTip(button, panel == KeyBorrowed
+                    ? $"{chord.Numeral}: borrowed from outside {chords!.Key}"
+                    : $"{chord.Numeral} in {chords!.Key}");
+                button.Click += (_, _) => InsertChord(chord.Chord);
+                panel.Children.Add(button);
+            }
+        }
+    }
+
+    // Change key here: a {key} line at the cursor, which the song follows from there on.
+    private void OnKeyChangeSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (KeyChangeBox.SelectedItem is not string key)
+            return;
+        var (result, caret) = EditorInsert.Line(EditorBox.Text ?? "", EditorBox.CaretIndex, $"{{key: {key}}}");
+        KeyChangeBox.SelectedItem = null;
+        SetEditorText(result, caret, quiet: false);
+        RefreshKeyCompanion();
         EditorBox.Focus();
     }
 

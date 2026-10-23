@@ -11,6 +11,25 @@ public static partial class EditorInsert
     [GeneratedRegex(@"\{\s*(?:start_of_verse|sov)\b[^}]*?Verse\s+(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex NumberedVerseRegex();
 
+    [GeneratedRegex(@"^\s*\{\s*key\s*:\s*([^}]+?)\s*\}\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+    private static partial Regex KeyRegex();
+
+    /// <summary>
+    /// The key in force at <paramref name="caret"/>: the last <c>{key}</c> before it, or the song's
+    /// first one when the cursor is above them all (in the header). Null when the song has none.
+    /// </summary>
+    public static string? KeyAt(string text, int caret)
+    {
+        var keys = KeyRegex().Matches(text);
+        if (keys.Count == 0)
+            return null;
+        var before = keys.LastOrDefault(m => m.Index <= Math.Clamp(caret, 0, text.Length));
+        return (before ?? keys[0]).Groups[1].Value;
+    }
+
+    /// <summary>How many <c>{key}</c> lines the song has (more than one: it changes key).</summary>
+    public static int KeyCount(string text) => KeyRegex().Count(text);
+
     /// <summary>"Verse 3" when the song already has verses 1 and 2.</summary>
     public static string NextVerseLabel(string text)
     {

@@ -27,6 +27,13 @@ public sealed class Song
     /// <summary>Guitar fingerings declared in the file with <c>{define}</c>, keyed by chord name.</summary>
     public Dictionary<string, ChordShape> ChordDefinitions { get; } = [];
 
+    /// <summary>
+    /// Fingerings for one instrument, from <c>{define-ukulele: C …}</c>: keyed by the directive's
+    /// selector (<see cref="Chords.Instrument.Selector"/>), then by chord. ChordPro apps use a
+    /// selected directive only for that instrument.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, ChordShape>> InstrumentDefinitions { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Every chord played, in order and with repeats (tab and grid sections excluded).</summary>
     public IEnumerable<string> ChordUsages() =>
         Sections
@@ -99,6 +106,9 @@ public sealed record ChordSegment(string? Chord, string Lyric);
 public enum CommentStyle { Normal, Italic, Box }
 
 public sealed record CommentLine(string Text, CommentStyle Style) : SongLine;
+
+/// <summary>A change of key part way through a song: a second <c>{key}</c> directive.</summary>
+public sealed record KeyChangeLine(string Key) : SongLine;
 
 /// <summary>A line that must be shown verbatim in a monospaced font (tabs, grids).</summary>
 public sealed record PreformattedLine(string Text) : SongLine;

@@ -25,8 +25,11 @@ public sealed record SongPalette(IBrush Background, IBrush Text, IBrush MutedTex
     }
 }
 
-/// <summary>A chord the user tapped: its name as shown, and the song's own fingering for it if that applies.</summary>
-public sealed record ChordTap(string Name, ChordShape? DefinedShape, Control Anchor);
+/// <summary>
+/// A chord the user tapped: its name as shown, its name as written in the file (they differ when the
+/// song is transposed, capoed or simplified), and the song's own fingering for it if that applies.
+/// </summary>
+public sealed record ChordTap(string Name, string Written, ChordShape? DefinedShape, Control Anchor);
 
 public sealed record RenderOptions
 {
@@ -67,6 +70,7 @@ public sealed partial class SongRenderer(RenderOptions options)
     private SongPalette Palette => options.Palette;
 
     private int _shift;
+    private int _keyShift;
     private bool? _preferFlats;
     private string? _writtenKey;
     private Song? _song;
@@ -91,6 +95,8 @@ public sealed partial class SongRenderer(RenderOptions options)
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
         _writtenKey = ChordTransposer.WrittenKey(song.Key, fileCapo, options.KeyIncludesCapo, options.TuningOffset);
         _preferFlats = ChordTransposer.PrefersFlats(_writtenKey, _shift);
+        // A key change is shown the way the header shows the key: as heard.
+        _keyShift = options.Transpose + (options.KeyIncludesCapo ? 0 : fileCapo + options.TuningOffset);
         _song = song;
         Groups.Clear();
         LineControls.Clear();
@@ -181,7 +187,7 @@ public sealed partial class SongRenderer(RenderOptions options)
                 Foreground = Palette.Text,
                 Accent = Palette.Chord,
             };
-            MakeTappable(diagram, name, defined);
+            MakeTappable(diagram, name, written, defined);
             panel.Children.Add(diagram);
         }
 
@@ -292,7 +298,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         foreach (var line in lines)
             body.Children.Add(line);
         // A section of only comments (like "Solo" before an instrumental line) leads into the next one.
-        var leadIn = section.Lines.All(l => l is CommentLine or BlankLine);
+        var leadIn = section.Lines.All(l => l is CommentLine or BlankLine or KeyChangeLine);
         if (lines.Count > 0)
             Groups.Add((lines, leadIn));
 
@@ -315,6 +321,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         LyricLine lyrics => Text(string.Concat(lyrics.Segments.Select(s => s.Lyric)).Trim(), FontSize, wrap: true),
         PreformattedLine pre => Text(pre.Text, FontSize * 0.9, font: MonoFont),
         CommentLine comment => RenderComment(comment),
+        KeyChangeLine change => RenderComment(new CommentLine($"Key change: {ChordTransposer.Shift(change.Key, _keyShift)}", CommentStyle.Box)),
         BlankLine => new Control { Height = FontSize * 0.75 },
         _ => throw new ArgumentOutOfRangeException(nameof(line), line, null),
     };
@@ -370,7 +377,7 @@ public sealed partial class SongRenderer(RenderOptions options)
             text.Margin = new Thickness(0, 0, FontSize * 0.4, 0);
             text.Foreground = Palette.Chord;
             if (name.Length > 0)
-                MakeTappable(text, name, DefinedShape(_song!, chord, name));
+                MakeTappable(text, name, chord, DefinedShape(_song!, chord, name));
         }
         return text;
     }
@@ -399,14 +406,21 @@ public sealed partial class SongRenderer(RenderOptions options)
     // A {define} is written for a guitar in standard tuning, and applies to the chord exactly as
     // written on any guitar tuning where the strings it plays are tuned the same (Drop D, when it
     // leaves the low string out).
-    private ChordShape? DefinedShape(Song song, string written, string shown) =>
-        shown == written &&
-        song.ChordDefinitions.TryGetValue(written, out var defined) &&
-        options.Instrument.PlaysLike(Instrument.Guitar, defined)
+    // A fingering saved for the instrument itself ({define-ukulele: …}) comes first.
+    private ChordShape? DefinedShape(Song song, string written, string shown)
+    {
+        if (shown != written)
+            return null;
+        if (options.Instrument.Selector is { } selector &&
+            song.InstrumentDefinitions.TryGetValue(selector, out var own) &&
+            own.TryGetValue(written, out var mine) && mine.Frets.Count == options.Instrument.StringCount)
+            return mine;
+        return song.ChordDefinitions.TryGetValue(written, out var defined) && options.Instrument.PlaysLike(Instrument.Guitar, defined)
             ? defined
             : null;
+    }
 
-    private void MakeTappable(Control control, string name, ChordShape? defined)
+    private void MakeTappable(Control control, string name, string written, ChordShape? defined)
     {
         if (options.ChordTapped is not { } tapped)
             return;
@@ -416,7 +430,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         ToolTip.SetTip(control, $"Show {name} fingerings");
         control.Tapped += (_, e) =>
         {
-            tapped(new ChordTap(name, defined, control));
+            tapped(new ChordTap(name, written, defined, control));
             e.Handled = true;
         };
     }

@@ -177,6 +177,24 @@ public static partial class ChordProParser
                     pendingTime = SongTime.Parse(value);
                     break;
 
+                case var selected when selected.StartsWith("define-", StringComparison.Ordinal):
+                    // A fingering for one instrument ({define-ukulele: C …}).
+                    if (ParseDefinition(value) is var (instrumentChord, instrumentShape))
+                    {
+                        var selector = selected["define-".Length..];
+                        if (!song.InstrumentDefinitions.TryGetValue(selector, out var shapes))
+                            song.InstrumentDefinitions[selector] = shapes = [];
+                        shapes[instrumentChord] = instrumentShape;
+                    }
+                    break;
+
+                case "key" when song.Key is not null && value.Length > 0:
+                    // A second {key} changes key from here on (ChordPro: "each specification is
+                    // assumed to apply from where it was specified").
+                    song.AddMeta("key", value);
+                    AddLine(new KeyChangeLine(value.Trim()));
+                    break;
+
                 case "define" or "chord":
                     if (ParseDefinition(value) is var (chordName, shape))
                         song.ChordDefinitions[chordName] = shape;

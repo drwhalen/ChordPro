@@ -22,17 +22,30 @@ public sealed class ChordPopup : UserControl
     private readonly TextBlock _counter = new() { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly Button _previous = new() { Content = "◀" };
     private readonly Button _next = new() { Content = "▶" };
+    private readonly Button _use = new() { Content = "Use this fingering", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+    private readonly Button _forget = new() { Content = "Use the usual fingering", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+    private readonly Action<ChordShape>? _useShape;
     private int _index;
 
     /// <param name="shapes">Fingerings to show, best first; <c>Source</c> labels where one came from (e.g. "From the song").</param>
+    /// <param name="use">Saves the fingering shown as the song's own; null when it can't be (see <paramref name="cantUse"/>).</param>
+    /// <param name="forget">Drops the song's own fingering, going back to the usual one; null when it has none.</param>
+    /// <param name="cantUse">Why a fingering can't be saved, shown on the disabled button.</param>
     public ChordPopup(string name, IReadOnlyList<(ChordShape Shape, string? Source)> shapes, double fontSize, SongPalette palette,
-        Instrument? instrument = null)
+        Instrument? instrument = null, Action<ChordShape>? use = null, Action? forget = null, string? cantUse = null)
     {
         _instrument = instrument ?? Instrument.Guitar;
         _name = name;
         _shapes = shapes;
         _fontSize = fontSize;
         _palette = palette;
+
+        _useShape = use;
+        _use.Click += (_, _) => _useShape?.Invoke(_shapes[_index].Shape);
+        ToolTip.SetTip(_use, cantUse ?? "Save it in the song, so it's the one shown next time (and in other ChordPro apps)");
+        _forget.IsVisible = forget is not null;
+        _forget.Click += (_, _) => forget?.Invoke();
+        ToolTip.SetTip(_forget, "Take the song's own fingering out, and show the usual one");
 
         ToolTip.SetTip(_previous, "Previous fingering");
         ToolTip.SetTip(_next, "Next fingering");
@@ -59,7 +72,7 @@ public sealed class ChordPopup : UserControl
                     : $"No fingering found for {name}.",
                 Margin = new Thickness(4),
             }
-            : new StackPanel { MinWidth = 190, Spacing = 4, Children = { _diagramHost, _caption, _frets, pager } };
+            : new StackPanel { MinWidth = 190, Spacing = 4, Children = { _diagramHost, _caption, _frets, pager, _use, _forget } };
 
         if (shapes.Count > 0)
             Show(0);
@@ -79,6 +92,8 @@ public sealed class ChordPopup : UserControl
         _frets.Text = _instrument.Notation(shape);
         _counter.Text = $"{_index + 1} of {_shapes.Count}";
         _previous.IsEnabled = _next.IsEnabled = _shapes.Count > 1;
+        // The song's own fingering is already the one used.
+        _use.IsEnabled = _useShape is not null && source != "From the song";
     }
 
     private string Describe(ChordShape shape)

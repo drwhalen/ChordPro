@@ -89,6 +89,14 @@ public sealed record Instrument(string Name, IReadOnlyList<int> Tuning, bool Bas
     public bool IsDiatonic => FretSemitones is not null;
 
     /// <summary>
+    /// The name a song's fingering for this instrument is tagged with, <c>{define-ukulele: …}</c>
+    /// (letters and digits of the name: "ukulele", "mandolin", "guitardropd"); null for the
+    /// standard guitar, whose fingerings are a plain <c>{define}</c>.
+    /// </summary>
+    public string? Selector => this == Guitar ? null
+        : new string([.. Name.ToLowerInvariant().Where(char.IsLetterOrDigit)]);
+
+    /// <summary>
     /// The kind of instrument, whatever its tuning: Guitar, Ukulele, Mandolin or Dulcimer (the
     /// Merlin included). A song's own tuning only applies to a player of the same kind.
     /// </summary>
