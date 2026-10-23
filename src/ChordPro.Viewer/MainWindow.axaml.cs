@@ -302,6 +302,7 @@ public partial class MainWindow : Window
         Instrument = CurrentInstrument,
         Palette = SongPalette.FromTheme(CurrentTheme),
         SimplifyChords = _settings.SimplifyChords,
+        ChordNumbers = _settings.ChordNumbers,
         KeyIncludesCapo = _settings.KeyIncludesCapo,
         ChordTapped = ShowChordPopup,
         // After the click: transposing rebuilds the song, including the button being clicked, and
@@ -1055,6 +1056,7 @@ public partial class MainWindow : Window
         ShowChordsCheck.IsChecked = _settings.ShowChords;
         ShowDiagramsCheck.IsChecked = _settings.ShowDiagrams;
         SimplifyChordsCheck.IsChecked = _settings.SimplifyChords;
+        ChordNumbersCheck.IsChecked = _settings.ChordNumbers;
         KeyIncludesCapoCheck.IsChecked = _settings.KeyIncludesCapo;
         InstrumentBox.ItemsSource = Instrument.All;
         InstrumentBox.SelectedItem = PlayerInstrument;
@@ -1087,6 +1089,7 @@ public partial class MainWindow : Window
         _settings.ShowChords = ShowChordsCheck.IsChecked == true;
         _settings.ShowDiagrams = ShowDiagramsCheck.IsChecked == true;
         _settings.SimplifyChords = SimplifyChordsCheck.IsChecked == true;
+        _settings.ChordNumbers = ChordNumbersCheck.IsChecked == true;
         _settings.Instrument = (InstrumentBox.SelectedItem as Instrument ?? Instrument.Guitar).Name;
         var keyConventionChanged = _settings.KeyIncludesCapo != (KeyIncludesCapoCheck.IsChecked == true);
         _settings.KeyIncludesCapo = KeyIncludesCapoCheck.IsChecked == true;
@@ -2094,15 +2097,19 @@ public partial class MainWindow : Window
     // ---- Key companion: the chords of the key at the cursor -------------------------------------
 
     private string? _companionKey = "";
+    private string? _companionAfter;
 
-    // Shows the chords of the key in force at the cursor; rebuilt only when that key changes.
+    // Shows the chords of the key in force at the cursor, with those that usually follow the chord
+    // just before it picked out; rebuilt only when the key or that chord changes.
     private void RefreshKeyCompanion()
     {
         var text = EditorBox.Text ?? "";
         var key = EditorInsert.KeyAt(text, EditorBox.CaretIndex);
-        if (key == _companionKey)
+        var after = EditorInsert.ChordBefore(text, EditorBox.CaretIndex);
+        if (key == _companionKey && after == _companionAfter)
             return;
-        _companionKey = key;
+        (_companionKey, _companionAfter) = (key, after);
+        var next = after is null ? [] : ChordProgressions.Next(key, after);
         if (KeyChangeBox.ItemsSource is null)
             KeyChangeBox.ItemsSource = KeyChords.AllKeys;
 
@@ -2110,7 +2117,9 @@ public partial class MainWindow : Window
         var changes = EditorInsert.KeyCount(text) > 1;
         KeyCompanionTitle.Text = chords is null
             ? "Give the song a {key: …} to see the chords that go with it"
-            : $"In {chords.Key}{(changes ? " here" : "")}: tap a chord to insert it";
+            : next.Count > 0
+                ? $"In {chords.Key}{(changes ? " here" : "")}, after {after} try {(next.Count == 1 ? next[0].Chord : $"{string.Join(", ", next.Take(next.Count - 1).Select(c => c.Chord))} or {next[^1].Chord}")}"
+                : $"In {chords.Key}{(changes ? " here" : "")}: tap a chord to insert it";
         foreach (var (panel, list) in new[] { (KeyTriads, chords?.Triads), (KeySevenths, chords?.Sevenths), (KeyBorrowed, chords?.Borrowed) })
         {
             panel.Children.Clear();
@@ -2133,6 +2142,9 @@ public partial class MainWindow : Window
                 ToolTip.SetTip(button, panel == KeyBorrowed
                     ? $"{chord.Numeral}: borrowed from outside {chords!.Key}"
                     : $"{chord.Numeral} in {chords!.Key}");
+                // What usually comes after the chord before the cursor stands out.
+                if (next.Any(n => n.Chord == chord.Chord))
+                    button.Classes.Add("accent");
                 button.Click += (_, _) => InsertChord(chord.Chord);
                 panel.Children.Add(button);
             }

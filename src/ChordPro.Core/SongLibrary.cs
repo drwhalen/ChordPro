@@ -14,6 +14,12 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
     /// <summary>The chords the song uses, as written.</summary>
     public IReadOnlyList<string> Chords { get; init; } = [];
 
+    /// <summary>The album the song first came out on (<c>{album}</c>), if it says.</summary>
+    public string? Album { get; init; }
+
+    /// <summary>The year the song came out (<c>{year}</c>), if it says.</summary>
+    public int? Year { get; init; }
+
     /// <summary>How long the song lasts (<c>{duration}</c>), if it says.</summary>
     public TimeSpan? Length { get; init; }
 
@@ -38,7 +44,7 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
 public sealed record KeyChoice(string Key, string Label);
 
 /// <summary>How the library list is grouped.</summary>
-public enum LibraryGrouping { None, Artist, Book, Recent }
+public enum LibraryGrouping { None, Artist, Book, Recent, Decade }
 
 /// <summary>A heading in the grouped library (an artist or a book) and the songs under it.</summary>
 public sealed record SongGroup(string Name, IReadOnlyList<SongInfo> Songs)
@@ -48,6 +54,9 @@ public sealed record SongGroup(string Name, IReadOnlyList<SongInfo> Songs)
 
     /// <summary>Heading for songs without a <c>{book}</c> directive.</summary>
     public const string NoBook = "Not in a book";
+
+    /// <summary>The decade heading for songs with no <c>{year}</c>.</summary>
+    public const string UnknownYear = "Year unknown";
 }
 
 public static partial class SongLibrary
@@ -110,6 +119,16 @@ public static partial class SongLibrary
     /// </summary>
     public static List<SongGroup> Group(IEnumerable<SongInfo> songs, LibraryGrouping grouping, DateTime? now = null)
     {
+        if (grouping == LibraryGrouping.Decade)
+        {
+            // Oldest first, and songs from no known year last.
+            return songs
+                .GroupBy(s => DecadeGroup(s.Year))
+                .OrderBy(g => g.Key == SongGroup.UnknownYear)
+                .ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new SongGroup(g.Key, g.OrderBy(s => s.Year).ThenBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase).ToList()))
+                .ToList();
+        }
         if (grouping == LibraryGrouping.Recent)
         {
             var today = (now ?? DateTime.Now).Date;
@@ -134,6 +153,8 @@ public static partial class SongLibrary
     {
         if (grouping == LibraryGrouping.Recent)
             return [RecentGroup(song.Added, (now ?? DateTime.Now).Date)];
+        if (grouping == LibraryGrouping.Decade)
+            return [DecadeGroup(song.Year)];
         if (grouping == LibraryGrouping.Book)
         {
             var books = song.Books.Select(b => b.Trim()).Where(b => b.Length > 0)
@@ -142,6 +163,9 @@ public static partial class SongLibrary
         }
         return [song.Artist?.Trim() is { Length: > 0 } artist ? artist : SongGroup.UnknownArtist];
     }
+
+    // "1970s", from {year}.
+    private static string DecadeGroup(int? year) => year is { } y ? $"{y / 10 * 10}s" : SongGroup.UnknownYear;
 
     // "Today", "Yesterday", "Earlier this week" (since Monday), "Earlier this month", then the month.
     private static string RecentGroup(DateTime? added, DateTime today)
@@ -278,6 +302,8 @@ public static partial class SongLibrary
                 Chords = [.. song.ChordUsages().Distinct()],
                 Tuning = song.Tuning,
                 Length = SongTime.Parse(song.Duration),
+                Album = song.GetMeta("album"),
+                Year = int.TryParse(song.GetMeta("year")?.Trim(), out var year) && year is > 1000 and < 3000 ? year : null,
             };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

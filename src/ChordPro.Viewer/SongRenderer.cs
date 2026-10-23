@@ -43,6 +43,8 @@ public sealed record RenderOptions
     public Instrument Instrument { get; init; } = Instrument.Guitar;
     public int Columns { get; init; } = 1;
     public SongPalette Palette { get; init; } = SongPalette.FromTheme(SongTheme.Day);
+    /// <summary>Show chords as Nashville numbers in their key ("5⁷" for G7 in C), so the song can be called in any key.</summary>
+    public bool ChordNumbers { get; init; }
     /// <summary>Show easier forms of chords (Cmaj9 → C, Am7 → Am, G/B → G).</summary>
     public bool SimplifyChords { get; init; }
     /// <summary>The file's <c>{key}</c> is the key heard with its capo on (LivePrompter), not the key of the chords as written.</summary>
@@ -71,6 +73,10 @@ public sealed partial class SongRenderer(RenderOptions options)
 
     private int _shift;
     private int _keyShift;
+    // For chord numbers: the key of the chords as written where the renderer has got to (a song
+    // can change key part way), and the file's capo, to read a key change the same way.
+    private string? _lineKey;
+    private int _fileCapo;
     private bool? _preferFlats;
     private string? _writtenKey;
     private Song? _song;
@@ -97,6 +103,8 @@ public sealed partial class SongRenderer(RenderOptions options)
         _preferFlats = ChordTransposer.PrefersFlats(_writtenKey, _shift);
         // A key change is shown the way the header shows the key: as heard.
         _keyShift = options.Transpose + (options.KeyIncludesCapo ? 0 : fileCapo + options.TuningOffset);
+        _lineKey = _writtenKey;
+        _fileCapo = fileCapo;
         _song = song;
         Groups.Clear();
         LineControls.Clear();
@@ -321,7 +329,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         LyricLine lyrics => Text(string.Concat(lyrics.Segments.Select(s => s.Lyric)).Trim(), FontSize, wrap: true),
         PreformattedLine pre => Text(pre.Text, FontSize * 0.9, font: MonoFont),
         CommentLine comment => RenderComment(comment),
-        KeyChangeLine change => RenderComment(new CommentLine($"Key change: {ChordTransposer.Shift(change.Key, _keyShift)}", CommentStyle.Box)),
+        KeyChangeLine change => RenderKeyChange(change),
         BlankLine => new Control { Height = FontSize * 0.75 },
         _ => throw new ArgumentOutOfRangeException(nameof(line), line, null),
     };
@@ -371,7 +379,11 @@ public sealed partial class SongRenderer(RenderOptions options)
     private TextBlock ChordText(string? chord)
     {
         var name = chord is null ? "" : DisplayChord(chord);
-        var text = Text(name, FontSize * 0.9, FontWeight.Bold);
+        // As a number, it's the chord as written in the key as written: the same in any key.
+        var shown = chord is not null && options.ChordNumbers
+            ? ChordProgressions.Number(options.SimplifyChords ? ChordSimplifier.Simplify(chord) : chord, _lineKey) ?? name
+            : name;
+        var text = Text(shown, FontSize * 0.9, FontWeight.Bold);
         if (chord is not null)
         {
             text.Margin = new Thickness(0, 0, FontSize * 0.4, 0);
@@ -433,6 +445,13 @@ public sealed partial class SongRenderer(RenderOptions options)
             tapped(new ChordTap(name, written, defined, control));
             e.Handled = true;
         };
+    }
+
+    // A key change from here on: shown as heard, and the key chord numbers count from after it.
+    private Control RenderKeyChange(KeyChangeLine change)
+    {
+        _lineKey = ChordTransposer.WrittenKey(change.Key, _fileCapo, options.KeyIncludesCapo, options.TuningOffset);
+        return RenderComment(new CommentLine($"Key change: {ChordTransposer.Shift(change.Key, _keyShift)}", CommentStyle.Box));
     }
 
     private Control RenderComment(CommentLine comment)

@@ -62,6 +62,8 @@ public sealed class AppSettings
     public bool ShowChords { get; set; } = true;
     public bool ShowDiagrams { get; set; }
     public bool SimplifyChords { get; set; }
+    /// <summary>Show chords as Nashville numbers (1 4 5) in their key.</summary>
+    public bool ChordNumbers { get; set; }
     /// <summary>Songs' <c>{key}</c> is the key heard with the capo on, as LivePrompter writes it.</summary>
     public bool KeyIncludesCapo { get; set; }
     /// <summary>The library folder <see cref="KeyIncludesCapo"/> was last chosen for, by guessing or by hand.</summary>

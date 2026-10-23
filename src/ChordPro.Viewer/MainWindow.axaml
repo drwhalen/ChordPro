@@ -125,6 +125,8 @@
                                 <StackPanel Spacing="6" MinWidth="180">
                                     <CheckBox x:Name="ShowChordsCheck" Content="Show chords" IsCheckedChanged="OnViewOptionChanged" />
                                     <CheckBox x:Name="ShowDiagramsCheck" Content="Chord diagrams" IsCheckedChanged="OnViewOptionChanged" />
+                                <CheckBox x:Name="ChordNumbersCheck" Content="Chord numbers (1 4 5)" IsCheckedChanged="OnViewOptionChanged"
+                                          ToolTip.Tip="Show chords as Nashville numbers in their key (5⁷ for G7 in C), so the song can be called in any key. Tap one to see its chord." />
                                 <CheckBox x:Name="SimplifyChordsCheck" Content="Easy chords" IsCheckedChanged="OnViewOptionChanged"
                                           ToolTip.Tip="Show simpler chords: Cmaj9 → C, Am7 → Am, G/B → G, F#m7b5 → F#m" />
                                     <CheckBox x:Name="KeyIncludesCapoCheck" Content="Song keys include the capo" IsCheckedChanged="OnViewOptionChanged"
@@ -179,6 +181,7 @@
                                 <ComboBoxItem Content="Group by artist" />
                                 <ComboBoxItem Content="Group by book" />
                                 <ComboBoxItem Content="Recently added" />
+                                <ComboBoxItem Content="Group by decade" />
                             </ComboBox>
                             <Grid ColumnDefinitions="*,6,*">
                                 <ComboBox x:Name="KeyFilterCombo" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged"

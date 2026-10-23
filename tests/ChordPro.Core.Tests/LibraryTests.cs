@@ -365,4 +365,14 @@ public sealed class LibraryTests : IDisposable
             + "{start_of_tab}\ne|---3---| x2\n{end_of_tab}\n";
         Assert.Empty(LibraryCheck.CheckChordProStyle(text, ChordProParser.Parse(text)));
     }
+
+    [Fact]
+    public void GroupsByDecadeOldestFirstWithUnknownYearsLast()
+    {
+        SongInfo Song(string title, int? year) => new($"/x/{title}.cho", title, "A") { Year = year };
+        var groups = SongLibrary.Group([Song("Wonderwall", 1995), Song("Hey Jude", 1968), Song("Original", null), Song("Let It Be", 1970), Song("Yesterday", 1965)], LibraryGrouping.Decade);
+
+        Assert.Equal(["1960s", "1970s", "1990s", SongGroup.UnknownYear], groups.Select(g => g.Name));
+        Assert.Equal(["Yesterday", "Hey Jude"], groups[0].Songs.Select(s => s.Title));
+    }
 }

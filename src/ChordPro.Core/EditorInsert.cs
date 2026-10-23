@@ -27,6 +27,16 @@ public static partial class EditorInsert
         return (before ?? keys[0]).Groups[1].Value;
     }
 
+    [GeneratedRegex(@"\[([^\[\]]+)\]")]
+    private static partial Regex InlineChordRegex();
+
+    /// <summary>The last chord written before <paramref name="caret"/> (<c>[D]</c> gives "D"), or null.</summary>
+    public static string? ChordBefore(string text, int caret)
+    {
+        var at = Math.Clamp(caret, 0, text.Length);
+        return InlineChordRegex().Matches(text).LastOrDefault(m => m.Index + m.Length <= at)?.Groups[1].Value;
+    }
+
     /// <summary>How many <c>{key}</c> lines the song has (more than one: it changes key).</summary>
     public static int KeyCount(string text) => KeyRegex().Count(text);
 

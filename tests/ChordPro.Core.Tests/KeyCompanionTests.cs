@@ -35,6 +35,15 @@ public class KeyCompanionTests
     }
 
     [Fact]
+    public void FindsTheChordBeforeTheCursor()
+    {
+        var text = "[G]Walking down the [C]road\n[D]";
+        Assert.Equal("C", EditorInsert.ChordBefore(text, text.IndexOf("road")));
+        Assert.Equal("D", EditorInsert.ChordBefore(text, text.Length));
+        Assert.Null(EditorInsert.ChordBefore(text, 0));
+    }
+
+    [Fact]
     public void ASecondKeyIsAKeyChangeWhereItStands()
     {
         var song = ChordProParser.Parse("{key: G}\n[G]Verse\n{key: A}\n[A]Lift\n");
