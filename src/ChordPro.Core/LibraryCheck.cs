@@ -203,7 +203,8 @@ public static partial class LibraryCheck
     /// <summary>The problems in one song; <paramref name="path"/> is only used for its file name.</summary>
     public static IEnumerable<string> CheckSong(string path, Song song)
     {
-        if (song.Key is null)
+        // A song sung a cappella has no chords, and so nothing for a key to describe.
+        if (song.Key is null && song.ChordUsages().Any())
             yield return "No {key:}";
         else if (FileNameKeyRegex().Match(Path.GetFileNameWithoutExtension(path)) is { Success: true } named &&
                  SongLibrary.ParseKey(named.Groups["key"].Value) is not null &&

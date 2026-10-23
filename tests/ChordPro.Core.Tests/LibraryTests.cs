@@ -220,6 +220,7 @@ public sealed class LibraryTests : IDisposable
             ],
             LibraryCheck.CheckSong("/x/T - Someone (A).txt", song));
         Assert.Equal(["No {key:}"], LibraryCheck.CheckSong("/x/U.txt", ChordProParser.Parse("[C]la")));
+        Assert.Empty(LibraryCheck.CheckSong("/x/The Scotsman - Mike Cross.cho", ChordProParser.Parse("{title: The Scotsman}\nA scotsman clad in kilt")));
         Assert.Equal(["{title:} is “Pink Floyd”, which the file name gives as the artist — title and artist look swapped"],
             LibraryCheck.CheckSong("/x/Pigs On The Wing - Pink Floyd (G).txt", ChordProParser.Parse("{title: Pink Floyd}\n{key: G}")));
         Assert.Empty(LibraryCheck.CheckSong("/x/Pigs On The Wing - Pink Floyd (G).txt", ChordProParser.Parse("{title: Pigs On The Wing}\n{key: G}")));
