@@ -132,6 +132,11 @@ public static partial class LibraryCheck
     [GeneratedRegex(@"(?:^|\s)\*?(?:\(\s*(?:[xX]\s?\d{1,2}|\d{1,2}\s?[xX])\s*\)|[xX]\s?\d{1,2}|\d{1,2}\s?[xX])\*?\s*$")]
     private static partial Regex RepeatCountRegex();
 
+    // A lyric line that's really a note to the player: words rarely sung ("strum", "capo",
+    // "organ only", "play 4 times", "repeat chorus") or a fret pattern ("x02210", "320003").
+    [GeneratedRegex(@"^\W*(strum\w*|capo\b|arpeggiate|fingerpick\w*|palm mute|hammer[- ]on|let (it )?ring|(organ|guitar|bass|flute|piano|harmonica|drums?|horns?|brass|synth|sax)\s+(only|solo|fill|comes in|added)|repeat\s+(the\s+)?(chorus|intro|verse|pre-chorus|bridge|outro|riff)|play\s+(it\s+)?(\d+\s+times|once|twice)|hold (the )?last chord)\b|(^|\s)(?=[x0-9]*x)[x0-9]{6}(\s|$)|(^|\s)\d{6}(\s|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex PlayingNoteRegex();
+
     // A chart that mentions playing in another tuning.
     [GeneratedRegex(@"\b(drop(ped)? d|half[- ]step down|whole[- ]step down|tuned (down|to)|dadgad|open [a-g] tuning|e♭ tuning|eb tuning|eb standard|d standard)\b", RegexOptions.IgnoreCase)]
     private static partial Regex TuningMentionRegex();
@@ -166,6 +171,16 @@ public static partial class LibraryCheck
             else if (!directive && !preformatted && RepeatCountRegex().Match(line) is { Success: true } count)
                 yield return $"Line {i + 1} ends in a repeat count (“{count.Value.Trim()}”); put {{comment: Repeat …}} on the line above instead";
         }
+        var notes = song.Sections.Where(s => s.Kind is not (SectionKind.Tab or SectionKind.Grid))
+            .SelectMany(s => s.Lines.OfType<LyricLine>())
+            .Where(l => l.Segments.All(s => s.Chord is null))
+            .Select(l => string.Concat(l.Segments.Select(s => s.Lyric)).Trim())
+            .Where(text => PlayingNoteRegex().IsMatch(text))
+            .ToList();
+        if (notes.Count > 0)
+            yield return $"{Count(notes.Count, "line reads", "lines read")} like a note to the player (“{notes[0]}”); "
+                + "a note goes in {comment: …} so it isn't sung";
+
         if (chordLines > 0)
             yield return $"{Count(chordLines, "fingering is", "fingerings are")} written {{chord: …}}, which draws a diagram where it stands; "
                 + "use {define: …} for the song's fingerings";

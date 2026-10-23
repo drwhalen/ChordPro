@@ -349,6 +349,15 @@ public sealed class LibraryTests : IDisposable
     }
 
     [Fact]
+    public void ChordProStyleFindsPlayingNotesInTheLyrics()
+    {
+        var text = "{title: T}\n{key: G}\n\n{start_of_verse: label=\"Verse 1\"}\nStrum\n[G]La la\nOrgan only\nAm x02210\n"
+            + "Play it now, my baby\nYour life begins to fade\n{end_of_verse}\n";
+        var problem = Assert.Single(LibraryCheck.CheckChordProStyle(text, ChordProParser.Parse(text)));
+        Assert.StartsWith("3 lines read like a note to the player (“Strum”)", problem);
+    }
+
+    [Fact]
     public void ChordProStyleAcceptsASongWrittenTheChordProWay()
     {
         var text = "{title: T}\n{key: G}\n{meta: tuning Drop D}\n{define: Cadd9 base-fret 1 frets x 3 2 0 3 0}\n\n"

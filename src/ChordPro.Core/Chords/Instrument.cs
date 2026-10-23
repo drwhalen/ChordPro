@@ -99,6 +99,16 @@ public sealed record Instrument(string Name, IReadOnlyList<int> Tuning, bool Bas
         : Name;
 
     /// <summary>
+    /// Whether a shape written for <paramref name="writtenFor"/> (a song's own fingering, written
+    /// for a guitar in standard tuning) plays the same chord here: every string it sounds is tuned
+    /// alike. A Drop D guitar plays any shape that leaves the low string out; Open G, few.
+    /// </summary>
+    public bool PlaysLike(Instrument writtenFor, ChordShape shape) =>
+        Family == writtenFor.Family && !IsDiatonic && StringCount == writtenFor.StringCount &&
+        shape.Frets.Count == StringCount &&
+        Enumerable.Range(0, StringCount).All(i => shape.Frets[i] < 0 || Tuning[i] == writtenFor.Tuning[i]);
+
+    /// <summary>
     /// The instrument tuned down (or up) by some semitones, for the tuner: the chords are still
     /// written and fingered as in the usual tuning, only the strings sound lower.
     /// </summary>

@@ -14,6 +14,9 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
     /// <summary>The chords the song uses, as written.</summary>
     public IReadOnlyList<string> Chords { get; init; } = [];
 
+    /// <summary>How long the song lasts (<c>{duration}</c>), if it says.</summary>
+    public TimeSpan? Length { get; init; }
+
     /// <summary>The song's own tuning (<c>{meta: tuning …}</c>), if it gives one.</summary>
     public string? Tuning { get; init; }
 
@@ -274,6 +277,7 @@ public static partial class SongLibrary
             {
                 Chords = [.. song.ChordUsages().Distinct()],
                 Tuning = song.Tuning,
+                Length = SongTime.Parse(song.Duration),
             };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

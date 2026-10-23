@@ -14,6 +14,9 @@ namespace ChordPro.Viewer;
 public sealed record BookletEntry(string Title, string? Artist, string? Key, int Capo, double? Tempo, Song? Song, RenderOptions? Options)
 {
     public bool IsDivider => Song is null;
+
+    /// <summary>How long the song lasts (its <c>{duration}</c>), if it says.</summary>
+    public TimeSpan? Length { get; init; }
 }
 
 /// <summary>
@@ -117,7 +120,7 @@ public static class PdfExporter
         };
         Grid Row(params Control[] cells)
         {
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("32,*,64,64,72"), Margin = new Thickness(0, 3) };
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("32,*,56,56,72,56"), Margin = new Thickness(0, 3) };
             for (var i = 0; i < cells.Length; i++)
             {
                 Grid.SetColumn(cells[i], i);
@@ -139,27 +142,46 @@ public static class PdfExporter
             Children =
             {
                 Cell(name, PrintFontSize * 1.9, FontWeight.Bold),
-                Cell($"{entries.Count(e => !e.IsDivider)} songs  ·  {DateTime.Now:D}", PrintFontSize * 0.95, muted: true),
+                Cell($"{SetLength.Of(entries.Where(e => !e.IsDivider).Select(e => e.Length)).ToString().Replace(" · ", "  ·  ")}  ·  {DateTime.Now:D}",
+                    PrintFontSize * 0.95, muted: true),
             },
         });
-        Add(Row(Cell("#", 11, muted: true), Cell("Song", 11, muted: true), Cell("Key", 11, muted: true), Cell("Capo", 11, muted: true), Cell("Tempo", 11, muted: true)));
+        Add(Row(Cell("#", 11, muted: true), Cell("Song", 11, muted: true), Cell("Key", 11, muted: true), Cell("Capo", 11, muted: true),
+            Cell("Tempo", 11, muted: true), Cell("Length", 11, muted: true)));
         var number = 0;
-        foreach (var entry in entries)
+        for (var i = 0; i < entries.Count; i++)
         {
+            var entry = entries[i];
             if (entry.IsDivider)
             {
-                Add(new Border { Margin = new Thickness(0, 10, 0, 2), Child = Cell(entry.Title, PrintFontSize * 1.05, FontWeight.Bold) });
+                // The set's name, and how long it runs: its songs up to the next divider.
+                var set = SetLength.Of(entries.Skip(i + 1).TakeWhile(e => !e.IsDivider).Select(e => e.Length));
+                Add(new DockPanel
+                {
+                    Margin = new Thickness(0, 10, 0, 2),
+                    Children =
+                    {
+                        Docked(Cell(set.Songs > 0 ? set.ToString() : "", 11, muted: true), Dock.Right),
+                        Cell(entry.Title, PrintFontSize * 1.05, FontWeight.Bold),
+                    },
+                });
                 continue;
             }
             var song = new StackPanel { Children = { Cell(entry.Title, weight: FontWeight.SemiBold) } };
             if (entry.Artist is { } artist)
                 song.Children.Add(Cell(artist, 11, muted: true));
             Add(Row(Cell($"{++number}.", muted: true), song, Cell(entry.Key ?? "–"), Cell(entry.Capo > 0 ? entry.Capo.ToString() : "–"),
-                Cell(entry.Tempo is { } t ? $"{t:0} BPM" : "–")));
+                Cell(entry.Tempo is { } t ? $"{t:0} BPM" : "–"), Cell(entry.Length is { } l ? $"{(int)l.TotalMinutes}:{l.Seconds:00}" : "–")));
         }
         root.Measure(new Size(ContentWidth, double.PositiveInfinity));
         root.Arrange(new Rect(0, 0, ContentWidth, root.DesiredSize.Height));
         return (root, rows);
+    }
+
+    private static Control Docked(Control control, Dock dock)
+    {
+        DockPanel.SetDock(control, dock);
+        return control;
     }
 
     /// <summary>The renderer's groups with each line's position within <paramref name="root"/>.</summary>

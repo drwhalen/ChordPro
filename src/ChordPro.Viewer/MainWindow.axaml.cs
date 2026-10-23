@@ -1454,7 +1454,7 @@ public partial class MainWindow : Window
             var played = PlannedFor(info);
             var settings = _settings.Songs.GetValueOrDefault(path);
             var options = CurrentRenderOptions() with { Transpose = settings?.Transpose ?? 0, Capo = settings?.Capo };
-            entries.Add(new BookletEntry(info.Title, info.Artist, played.Key, played.Capo, played.Tempo, song, options));
+            entries.Add(new BookletEntry(info.Title, info.Artist, played.Key, played.Capo, played.Tempo, song, options) { Length = info.Length });
         }
         return (entries, missing);
     }
@@ -2038,14 +2038,23 @@ public partial class MainWindow : Window
 
     private void RefreshSetlist()
     {
-        SetlistNameText.Text = _setlistPath is null
-            ? $"Unsaved setlist · {_setlist.Songs.Count} songs"
-            : $"{Path.GetFileNameWithoutExtension(_setlistPath)} · {_setlist.Songs.Count} songs";
+        var infos = _setlist.Songs.Where(p => !Setlist.IsDivider(p)).Distinct()
+            .ToDictionary(p => p, p => SongLibrary.ReadInfo(p) ?? new SongInfo(p, $"{Path.GetFileName(p)} (missing)", null));
+        // How long it runs, from the songs' {duration}: the whole setlist, and each set.
+        var total = SetLength.Of(_setlist.Songs.Where(p => !Setlist.IsDivider(p)).Select(p => infos[p].Length));
+        // Each divider's set: the songs from it to the next divider.
+        SetLength SetAfter(int divider) => SetLength.Of(_setlist.Songs.Skip(divider + 1)
+            .TakeWhile(p => !Setlist.IsDivider(p)).Select(p => infos[p].Length));
+        SetlistNameText.Text = $"{(_setlistPath is null ? "Unsaved setlist" : Path.GetFileNameWithoutExtension(_setlistPath))} · {total}";
+        ToolTip.SetTip(SetlistNameText, total.WithoutLength > 0 && total.Known > TimeSpan.Zero
+            ? "The length adds up the songs' {duration}; songs without one aren't counted"
+            : null);
 
         _updatingLists = true;
         SetlistList.ItemsSource = _setlist.Songs
-            .Select(p => Setlist.IsDivider(p) ? new SongInfo(p, $"— {Setlist.DividerName(p)} —", null)
-                : SongLibrary.ReadInfo(p) ?? new SongInfo(p, $"{Path.GetFileName(p)} (missing)", null))
+            .Select((p, i) => Setlist.IsDivider(p)
+                ? new SongInfo(p, $"— {Setlist.DividerName(p)} —" + (SetAfter(i) is { Songs: > 0 } set ? $"  {set}" : ""), null)
+                : infos[p])
             .ToList();
         _updatingLists = false;
         SyncListSelections();

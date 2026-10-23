@@ -168,6 +168,19 @@ public class ChordShapeTests
     }
 
     [Fact]
+    public void ASongsGuitarFingeringPlaysOnTuningsWhereItsStringsAreTheSame()
+    {
+        var d = ChordShape.Parse("xx0232");       // leaves the low string out
+        var g = ChordShape.Parse("320003");       // uses it
+        Assert.True(Instrument.Guitar.PlaysLike(Instrument.Guitar, g));
+        Assert.True(Instrument.GuitarDropD.PlaysLike(Instrument.Guitar, d));
+        Assert.False(Instrument.GuitarDropD.PlaysLike(Instrument.Guitar, g));
+        Assert.False(Instrument.GuitarOpenG.PlaysLike(Instrument.Guitar, d)); // its top string is a D
+        Assert.False(Instrument.Ukulele.PlaysLike(Instrument.Guitar, d));
+        Assert.False(Instrument.DulcimerDAdd.PlaysLike(Instrument.Guitar, ChordShape.Parse("002")));
+    }
+
+    [Fact]
     public void FindsInstrumentsBySavedName()
     {
         Assert.Same(Instrument.DulcimerDAdd, Instrument.Find("Seagull Merlin")); // the name saved before it was renamed

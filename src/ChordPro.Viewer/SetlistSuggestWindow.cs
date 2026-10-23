@@ -25,7 +25,10 @@ public sealed class SetlistSuggestWindow : Window
     private readonly SongPalette _palette;
     private readonly VoiceRange _voice;
 
-    private readonly ComboBox _length = new() { ItemsSource = new[] { 6, 8, 10, 12, 15, 20 }, SelectedItem = 12, MinWidth = 70 };
+    // A number of songs, or a time to fill ("45 min"), which is turned into songs by the pool's
+    // typical song length.
+    private static readonly string[] Lengths = ["6 songs", "8 songs", "10 songs", "12 songs", "15 songs", "20 songs", "30 min", "45 min", "60 min", "90 min"];
+    private readonly ComboBox _length = new() { ItemsSource = Lengths, SelectedItem = "12 songs", MinWidth = 100 };
     private readonly ComboBox _from = new() { MinWidth = 180 };
     private readonly CheckBox _nearKeys = new() { Content = "Stay near my songs' keys", IsChecked = true };
     private readonly CheckBox _favorPlayed = new() { Content = "Favor songs I play often" };
@@ -88,7 +91,8 @@ public sealed class SetlistSuggestWindow : Window
                 ? "Add a few songs you like singing to the setlist first, and the set is built around them. Without any, it's built from the whole library."
                 : $"Built around the {_picked.Count} {(_picked.Count == 1 ? "song" : "songs")} in your setlist: {string.Join(", ", _picked.Select(p => p.Song.Title))}.",
         };
-        var options = new WrapPanel { Children = { Label("Songs"), _length, Label("from"), _from } };
+        var options = new WrapPanel { Children = { Label("Length"), _length, Label("from"), _from } };
+        ToolTip.SetTip(_length, "A number of songs, or a time to fill, from the songs' lengths ({duration})");
         foreach (var child in options.Children)
             child.Margin = new Thickness(0, 0, 8, 6);
         _nearKeys.Content = voice.IsEmpty ? "Stay near my songs' keys" : $"Stay near my keys ({string.Join(", ", voice.Keys.Distinct().Take(6))})";
@@ -121,12 +125,25 @@ public sealed class SetlistSuggestWindow : Window
             .Where(s => book is null || s.Books.Contains(book, StringComparer.CurrentCultureIgnoreCase))
             .Select(_toPlanned)
             .ToList();
-        var plan = SetlistPlanner.Plan(new SetlistRequest(pool, _picked, (int)(_length.SelectedItem ?? 12),
+        var plan = SetlistPlanner.Plan(new SetlistRequest(pool, _picked, SongCount(pool),
             NearMustIncludeKeys: _nearKeys.IsChecked == true, FavorPlayed: _favorPlayed.IsChecked == true, Variation: _variation++,
             Voice: _nearKeys.IsChecked == true ? _voice : null));
         _suggest.Content = "Try another";
         Show(plan, "Suggested set");
         _useButton.IsEnabled = _saveButton.IsEnabled = plan.Songs.Count > 0;
+    }
+
+    // The songs to suggest: the number chosen, or enough to fill the time chosen at the length
+    // songs in the pool usually run (four minutes when none of them says).
+    private int SongCount(IReadOnlyList<PlannedSong> pool)
+    {
+        var choice = _length.SelectedItem as string ?? "12 songs";
+        var number = int.Parse(choice.Split(' ')[0]);
+        if (!choice.EndsWith("min"))
+            return number;
+        var lengths = pool.Select(p => p.Song.Length).OfType<TimeSpan>().Select(l => l.TotalMinutes).Order().ToList();
+        var typical = lengths.Count > 0 ? lengths[lengths.Count / 2] : 4;
+        return Math.Clamp((int)Math.Round(number / typical), 3, 30);
     }
 
     private void Show(SetlistPlan plan, string heading)
@@ -135,7 +152,7 @@ public sealed class SetlistSuggestWindow : Window
         _heading.Text = heading;
         var counts = plan.Steps.GroupBy(s => s.Rating).ToDictionary(g => g.Key, g => g.Count());
         var unknown = plan.Songs.Count(s => s.Tempo is null);
-        _summary.Text = $"{plan.Songs.Count} songs. Steps: {counts.GetValueOrDefault("good")} good, {counts.GetValueOrDefault("fine")} fine, {counts.GetValueOrDefault("bump")} bumps."
+        _summary.Text = $"{SetLength.Of(plan.Songs.Select(s => s.Song.Length))}. Steps: {counts.GetValueOrDefault("good")} good, {counts.GetValueOrDefault("fine")} fine, {counts.GetValueOrDefault("bump")} bumps."
             + (unknown > 0 ? $" {unknown} without a tempo (tap one in to include it)." : "");
 
         _rows.Children.Clear();
@@ -143,7 +160,11 @@ public sealed class SetlistSuggestWindow : Window
         {
             var song = plan.Songs[i];
             var picked = _picked.Any(p => p.Song.Path == song.Song.Path);
-            var details = string.Join("   ", new[] { song.Key, song.Tempo is { } t ? $"{t:0} BPM" : null, song.Capo > 0 ? $"capo {song.Capo}" : null }.OfType<string>());
+            var details = string.Join("   ", new[]
+            {
+                song.Key, song.Tempo is { } t ? $"{t:0} BPM" : null, song.Capo > 0 ? $"capo {song.Capo}" : null,
+                song.Song.Length is { } l ? $"{(int)l.TotalMinutes}:{l.Seconds:00}" : null,
+            }.OfType<string>());
             // Far from the singer's keys: suggest moving it, e.g. "try in A (+2)".
             if (_voice.SuggestShift(song.Key) is { } shift)
                 details += $"\ntry in {ChordTransposer.Shift(song.Key, shift)} ({shift:+0;-0})";

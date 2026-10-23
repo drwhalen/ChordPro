@@ -396,10 +396,13 @@ public sealed partial class SongRenderer(RenderOptions options)
         Child = content,
     };
 
-    // A {define} applies to the chord exactly as written, on a guitar in standard tuning.
+    // A {define} is written for a guitar in standard tuning, and applies to the chord exactly as
+    // written on any guitar tuning where the strings it plays are tuned the same (Drop D, when it
+    // leaves the low string out).
     private ChordShape? DefinedShape(Song song, string written, string shown) =>
-        shown == written && options.Instrument == Instrument.Guitar &&
-        song.ChordDefinitions.TryGetValue(written, out var defined) && defined.Frets.Count == 6
+        shown == written &&
+        song.ChordDefinitions.TryGetValue(written, out var defined) &&
+        options.Instrument.PlaysLike(Instrument.Guitar, defined)
             ? defined
             : null;
 
