@@ -28,7 +28,8 @@ public static partial class LibraryCheck
     // "No chord" markers that aren't chord names but are used in brackets on purpose.
     private static readonly HashSet<string> NoChord = new(StringComparer.OrdinalIgnoreCase) { "N.C.", "NC", "N.C", "-", "x", "/", "|" };
 
-    /// <param name="livePrompter">Also report lines too wide for LivePrompter's screen.</param>
+    /// <param name="livePrompter">Also report lines too wide for LivePrompter's screen; otherwise,
+    /// report where a song strays from ChordPro's own ways of writing things (see <see cref="CheckChordProStyle"/>).</param>
     public static List<LibraryIssue> Run(IEnumerable<SongInfo> songs, IEnumerable<string> setlists, bool livePrompter = false)
     {
         var library = songs.ToList();
@@ -38,9 +39,11 @@ public static partial class LibraryCheck
             try
             {
                 var text = File.ReadAllText(info.Path);
-                var problems = CheckSong(info.Path, ChordProParser.Parse(text));
-                if (livePrompter)
-                    problems = problems.Concat(CheckLineWidths(text));
+                var song = ChordProParser.Parse(text);
+                var problems = CheckSong(info.Path, song);
+                problems = livePrompter
+                    ? problems.Concat(CheckLineWidths(text))
+                    : problems.Concat(CheckChordProStyle(text, song));
                 issues.AddRange(problems.Select(problem => new LibraryIssue(info.Path, info.Title, problem)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -122,6 +125,65 @@ public static partial class LibraryCheck
         }
         return previous[b.Length] <= allowed;
     }
+
+    // A repeat count at the end of a line, or alone on one: "x2", "2x", "(x2)". One or two
+    // digits, so a fingering like x57765 isn't one; a count inside a longer note in
+    // parentheses ("(w/ Intro Riff x4)") isn't the line's.
+    [GeneratedRegex(@"(?:^|\s)\*?(?:\(\s*(?:[xX]\s?\d{1,2}|\d{1,2}\s?[xX])\s*\)|[xX]\s?\d{1,2}|\d{1,2}\s?[xX])\*?\s*$")]
+    private static partial Regex RepeatCountRegex();
+
+    // A chart that mentions playing in another tuning.
+    [GeneratedRegex(@"\b(drop(ped)? d|half[- ]step down|whole[- ]step down|tuned (down|to)|dadgad|open [a-g] tuning|e♭ tuning|eb tuning|eb standard|d standard)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex TuningMentionRegex();
+
+    /// <summary>
+    /// Where a song strays from ChordPro's own ways of writing things, which other ChordPro apps
+    /// rely on: sections as plain heading lines ("Verse 1:") rather than section tags, a repeat
+    /// count left in a line rather than a comment above it, fingerings written with
+    /// <c>{chord}</c> (which draws a diagram where it stands) rather than <c>{define}</c>, and a
+    /// tuning mentioned in the text but not given as <c>{meta: tuning …}</c>.
+    /// </summary>
+    public static IEnumerable<string> CheckChordProStyle(string text, Song song)
+    {
+        var headings = song.Sections.Where(s => s.Kind == SectionKind.None && s.Label is not null).Select(s => s.Label!).ToList();
+        if (headings.Count > 0)
+            yield return $"{Count(headings.Count, "section is a heading line", "sections are heading lines")} (“{headings[0]}:”); "
+                + $"ChordPro marks a section with {{start_of_verse: label=\"{headings[0]}\"}} … {{end_of_verse}}";
+
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        var preformatted = false;
+        var chordLines = 0;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            var directive = line.StartsWith('{');
+            if (directive && (line.StartsWith("{start_of_tab", StringComparison.OrdinalIgnoreCase) || line.StartsWith("{start_of_grid", StringComparison.OrdinalIgnoreCase) || line is "{sot}" or "{sog}"))
+                preformatted = true;
+            else if (directive && (line.StartsWith("{end_of_tab", StringComparison.OrdinalIgnoreCase) || line.StartsWith("{end_of_grid", StringComparison.OrdinalIgnoreCase) || line is "{eot}" or "{eog}"))
+                preformatted = false;
+            else if (line.StartsWith("{chord:", StringComparison.OrdinalIgnoreCase))
+                chordLines++;
+            else if (!directive && !preformatted && RepeatCountRegex().Match(line) is { Success: true } count)
+                yield return $"Line {i + 1} ends in a repeat count (“{count.Value.Trim()}”); put {{comment: Repeat …}} on the line above instead";
+        }
+        if (chordLines > 0)
+            yield return $"{Count(chordLines, "fingering is", "fingerings are")} written {{chord: …}}, which draws a diagram where it stands; "
+                + "use {define: …} for the song's fingerings";
+
+        if (song.Tuning is null)
+        {
+            var mention = song.Sections.SelectMany(s => s.Lines).Select(l => l switch
+            {
+                CommentLine c => c.Text,
+                LyricLine l2 => string.Concat(l2.Segments.Select(s => s.Lyric)),
+                _ => "",
+            }).Select(t => TuningMentionRegex().Match(t)).FirstOrDefault(m => m.Success);
+            if (mention is not null)
+                yield return $"Mentions “{mention.Value}” but has no {{meta: tuning …}}";
+        }
+    }
+
+    private static string Count(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";
 
     /// <summary>Lines of a chart that LivePrompter would cut off, with where the cut falls.</summary>
     public static IEnumerable<string> CheckLineWidths(string text)

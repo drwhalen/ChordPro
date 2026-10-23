@@ -332,4 +332,27 @@ public sealed class LibraryTests : IDisposable
 
         Assert.Equal([Path.Combine(_folder, "one.cho")], Setlist.Load(file).Songs);
     }
+
+    [Fact]
+    public void ChordProStyleFindsHeadingLinesRepeatCountsChordLinesAndUntaggedTunings()
+    {
+        var text = "{title: T}\n{key: G}\n{chord: Cadd9 base-fret 1 frets x 3 2 0 3 0}\n\nVerse 1:\n[G]La la\n[G]  [C]  x2\n"
+            + "{comment: Play this in Drop D}\n";
+        var problems = LibraryCheck.CheckChordProStyle(text, ChordProParser.Parse(text)).ToList();
+
+        Assert.Equal(4, problems.Count);
+        Assert.StartsWith("1 section is a heading line (“Verse 1:”)", problems[0]);
+        Assert.StartsWith("Line 7 ends in a repeat count (“x2”)", problems[1]);
+        Assert.StartsWith("1 fingering is written {chord: …}", problems[2]);
+        Assert.Equal("Mentions “Drop D” but has no {meta: tuning …}", problems[3]);
+    }
+
+    [Fact]
+    public void ChordProStyleAcceptsASongWrittenTheChordProWay()
+    {
+        var text = "{title: T}\n{key: G}\n{meta: tuning Drop D}\n{define: Cadd9 base-fret 1 frets x 3 2 0 3 0}\n\n"
+            + "{start_of_verse: label=\"Verse 1\"}\n{comment: Repeat 2x}\n[G]  [C]\n[Dm7](w/ Intro Riff x4)\n{end_of_verse}\n"
+            + "{start_of_tab}\ne|---3---| x2\n{end_of_tab}\n";
+        Assert.Empty(LibraryCheck.CheckChordProStyle(text, ChordProParser.Parse(text)));
+    }
 }
