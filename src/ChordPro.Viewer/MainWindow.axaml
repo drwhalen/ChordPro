@@ -240,6 +240,23 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock x:Name="EditorTitle" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button x:Name="InsertButton" Content="Insert ▾" ToolTip.Tip="Insert a section around the selected lines, or a chorus repeat or comment at the cursor">
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                        <MenuItem Header="Verse" Tag="verse" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Chorus" Tag="chorus" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Bridge" Tag="bridge" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Intro" Tag="intro" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Outro" Tag="outro" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Solo" Tag="solo" Click="OnInsertSectionClick" />
+                                        <MenuItem Header="Instrumental" Tag="instrumental" Click="OnInsertSectionClick" />
+                                        <Separator />
+                                        <MenuItem Header="Repeat the chorus  {chorus}" Tag="{}{chorus}" Click="OnInsertLineClick" />
+                                        <MenuItem Header="Repeat count  {comment: Repeat 2x}" Tag="{}{comment: Repeat 2x}" Click="OnInsertLineClick" />
+                                        <MenuItem Header="Comment  {comment: …}" Tag="{}{comment: }" Click="OnInsertLineClick" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
                             <Button x:Name="SaveButton" Content="Save" Classes="accent" Click="OnSaveEditsClick" ToolTip.Tip="Save the file (⌘/Ctrl+S)" />
                             <Button x:Name="RevertButton" Content="Revert" Click="OnRevertEditsClick" ToolTip.Tip="Throw away changes since the last save" />
                             <Button Content="Done" Click="OnEditToggleClick" ToolTip.Tip="Close the editor" />

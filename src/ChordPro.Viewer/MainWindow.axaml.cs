@@ -2016,6 +2016,30 @@ public partial class MainWindow : Window
         EditorBox.Focus();
     }
 
+    // Insert ▾ → a section: around the selected lines, or empty at the cursor. A verse is numbered
+    // after the song's last one; a chorus needs no label, so it shows as plain "Chorus".
+    private void OnInsertSectionClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string name, Header: string header })
+            return;
+        var text = EditorBox.Text ?? "";
+        var label = name switch { "verse" => EditorInsert.NextVerseLabel(text), "chorus" => null, _ => header };
+        var (result, caret) = EditorInsert.Section(text, EditorBox.SelectionStart, EditorBox.SelectionEnd, name, label);
+        SetEditorText(result, caret, quiet: false);
+        EditorBox.Focus();
+    }
+
+    // Insert ▾ → a directive on a line of its own; a comment leaves the cursor ready to type it.
+    private void OnInsertLineClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string line })
+            return;
+        int? caretInLine = line == "{comment: }" ? line.Length - 1 : null;
+        var (result, caret) = EditorInsert.Line(EditorBox.Text ?? "", EditorBox.CaretIndex, line, caretInLine);
+        SetEditorText(result, caret, quiet: false);
+        EditorBox.Focus();
+    }
+
     private void OnInsertChordClick(object? sender, RoutedEventArgs e)
     {
         var chord = (ChordEntry.Text ?? "").Trim().Trim('[', ']').Trim();
