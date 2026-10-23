@@ -33,7 +33,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,
     `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument` (guitar, ukulele and mandolin tunings, dulcimer/Merlin tunings; a
     diatonic neck has `FretSemitones`, and shape frets are positions as laid out, so fret 7 is "6+";
-    `Instrument.Find` maps saved names, including the old "Seagull Merlin"), `SongTuning` (`{x_tuning}`,
+    `Instrument.Find` maps saved names, including the old "Seagull Merlin"), `SongTuning` (`{meta: tuning …}` or `{x_tuning}`; its offset moves the sounding key like a capo,
     applied only within the player's instrument family), `InstrumentFit` (unplayable chords, best
     transposition; used by the diagram call-out and the library filter)
   - `Themes/SongTheme` (built-in and custom themes, WCAG contrast), `Layout/PageLayout` (page breaks and

@@ -65,12 +65,14 @@ public static partial class ChordTransposer
     /// <c>{key}</c> includes the capo (LivePrompter's convention: the key you hear) is a capo's
     /// worth higher, e.g. key Eb with capo 3 is written in C.
     /// </summary>
-    public static string? WrittenKey(string? key, int capo, bool keyIncludesCapo) =>
-        keyIncludesCapo ? Shift(key, -capo) : key;
+    /// <param name="tuningOffset">Semitones the strings are tuned from standard (−1 for a half step
+    /// down); like a capo, it changes the key you hear but not the shapes.</param>
+    public static string? WrittenKey(string? key, int capo, bool keyIncludesCapo, int tuningOffset = 0) =>
+        keyIncludesCapo ? Shift(key, -capo - tuningOffset) : key;
 
-    /// <summary>The key you hear with the file's capo on; see <see cref="WrittenKey"/>.</summary>
-    public static string? SoundingKey(string? key, int capo, bool keyIncludesCapo) =>
-        keyIncludesCapo ? key : Shift(key, capo);
+    /// <summary>The key you hear with the file's capo on and the song's tuning; see <see cref="WrittenKey"/>.</summary>
+    public static string? SoundingKey(string? key, int capo, bool keyIncludesCapo, int tuningOffset = 0) =>
+        keyIncludesCapo ? key : Shift(key, capo + tuningOffset);
 
     /// <summary>Moves a key by <paramref name="semitones"/>, spelling the result as that key is usually written.</summary>
     public static string? Shift(string? key, int semitones) =>

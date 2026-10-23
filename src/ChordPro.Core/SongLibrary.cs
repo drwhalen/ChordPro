@@ -14,8 +14,11 @@ public sealed record SongInfo(string Path, string Title, string? Artist, string?
     /// <summary>The chords the song uses, as written.</summary>
     public IReadOnlyList<string> Chords { get; init; } = [];
 
-    /// <summary>The song's own tuning (<c>{x_tuning}</c>), if it gives one.</summary>
+    /// <summary>The song's own tuning (<c>{meta: tuning …}</c>), if it gives one.</summary>
     public string? Tuning { get; init; }
+
+    /// <summary>Semitones the song's tuning is from standard pitch (−1 for a half step down).</summary>
+    public int TuningOffset => SongTuning.Parse(Tuning)?.Offset ?? 0;
 
     /// <summary>The collections the song belongs to, from <c>{book}</c> directives.</summary>
     public IReadOnlyList<string> Books { get; } = Books ?? [];
@@ -162,7 +165,7 @@ public static partial class SongLibrary
     public static List<SongInfo> Filter(IEnumerable<SongInfo> songs, string? search, string? key = null, int? capo = null,
         bool keyIncludesCapo = false) =>
         songs.Where(s => string.IsNullOrWhiteSpace(search) || s.Matches(search))
-            .Where(s => key is null || SameKey(ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo), key))
+            .Where(s => key is null || SameKey(ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo, s.TuningOffset), key))
             .Where(s => capo is null || s.Capo == capo)
             .ToList();
 
@@ -171,7 +174,7 @@ public static partial class SongLibrary
     /// Spellings of the same key (C# and Db) are one choice.
     /// </summary>
     public static List<KeyChoice> Keys(IEnumerable<SongInfo> songs, bool keyIncludesCapo = false) =>
-        songs.Select(s => ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo)?.Trim()).OfType<string>().Where(k => k.Length > 0)
+        songs.Select(s => ChordTransposer.SoundingKey(s.Key, s.Capo, keyIncludesCapo, s.TuningOffset)?.Trim()).OfType<string>().Where(k => k.Length > 0)
             .GroupBy(k => ParseKey(k) is var (root, minor) ? $"{root}{(minor ? "m" : "")}" : k.ToLowerInvariant())
             .Select(g =>
             {

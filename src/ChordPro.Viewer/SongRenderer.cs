@@ -50,6 +50,8 @@ public sealed record RenderOptions
     public Action<int>? TransposeBy { get; init; }
     /// <summary>The song's own tuning, shown with the key ("Drop D, half step down"); null in the player's usual tuning.</summary>
     public string? Tuning { get; init; }
+    /// <summary>Semitones the song is tuned from standard (−1 for a half step down): like a capo, it moves the key you hear, not the shapes.</summary>
+    public int TuningOffset { get; init; }
 }
 
 /// <summary>Builds a read-only visual tree for a <see cref="Song"/>.</summary>
@@ -87,7 +89,7 @@ public sealed partial class SongRenderer(RenderOptions options)
         // Chords are written as shapes for the file's capo; re-spell them for the player's capo and transposition.
         var fileCapo = FileCapo(song);
         _shift = options.Transpose + fileCapo - (options.Capo ?? fileCapo);
-        _writtenKey = ChordTransposer.WrittenKey(song.Key, fileCapo, options.KeyIncludesCapo);
+        _writtenKey = ChordTransposer.WrittenKey(song.Key, fileCapo, options.KeyIncludesCapo, options.TuningOffset);
         _preferFlats = ChordTransposer.PrefersFlats(_writtenKey, _shift);
         _song = song;
         Groups.Clear();
@@ -134,15 +136,18 @@ public sealed partial class SongRenderer(RenderOptions options)
         var details = new List<string>();
         if (song.Key is { } key)
         {
-            // Show what the audience hears: the written key sounds a capo's worth higher. A key that
-            // already includes the capo keeps the file's own spelling unless the song is transposed.
-            details.Add($"Key: {ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : fileCapo))}");
+            // Show what the audience hears: the written key sounds a capo's worth higher, and lower
+            // when the strings are tuned down. A key that already includes them keeps the file's own
+            // spelling unless the song is transposed.
+            details.Add($"Key: {SoundingKey(song)}");
         }
         // (A dulcimer doesn't use the file's guitar capo, so there's nothing to say about it.)
         if (capo > 0 || (song.Capo is not null && !options.Instrument.IsDiatonic))
             details.Add(capo > 0 && _writtenKey is { } k ? $"Capo: {capo} (play {TransposeChord(k)} shapes)" : $"Capo: {capo}");
         if (options.Tuning is { } tuning)
-            details.Add($"Tuning: {tuning}");
+            details.Add(capo == 0 && options.TuningOffset != 0 && _writtenKey is { } shapes
+                ? $"Tuning: {tuning} (play {TransposeChord(shapes)} shapes)"
+                : $"Tuning: {tuning}");
         if (song.Tempo is { } tempo)
             details.Add($"Tempo: {tempo}");
         if (song.Time is { } time)
@@ -191,7 +196,7 @@ public sealed partial class SongRenderer(RenderOptions options)
             notes.Add(instrument.IsDiatonic
                 ? $"Not on the {instrument.Name} frets: {string.Join(", ", fit.Unplayable)}"
                 : $"No {instrument.Name} fingering for {string.Join(", ", fit.Unplayable)}");
-        var shownKey = song.Key is { } key ? ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : FileCapo(song))) : null;
+        var shownKey = SoundingKey(song);
         var flatKey = ChordTransposer.PrefersFlats(shownKey, 0) == true;
         if (fit.Partial.Count > 0)
             notes.Add("Played without a note the frets don't have: " + string.Join(", ", fit.Partial.Select(p =>
@@ -375,6 +380,11 @@ public sealed partial class SongRenderer(RenderOptions options)
     // The chord as it should be shown: simplified if asked, then moved for transposition and capo.
     private string DisplayChord(string written) =>
         TransposeChord(options.SimplifyChords ? ChordSimplifier.Simplify(written) : written);
+
+    // The key you hear: the song's key moved by the transposition, the file's capo and the tuning.
+    private string? SoundingKey(Song song) => song.Key is { } key
+        ? ChordTransposer.Shift(key, options.Transpose + (options.KeyIncludesCapo ? 0 : FileCapo(song) + options.TuningOffset))
+        : null;
 
     private Border Callout(Control content) => new()
     {

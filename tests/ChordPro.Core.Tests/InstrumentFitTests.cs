@@ -76,10 +76,33 @@ public class InstrumentFitTests
         Assert.Same(Instrument.Guitar, Instrument.Guitar.Retuned(0));
     }
 
-    [Fact]
-    public void ReadsTheTuningDirective()
+    [Theory]
+    [InlineData("{meta: tuning Drop D}")]
+    [InlineData("{x_tuning: Drop D}")]
+    public void ReadsTheTuningFromMetadata(string directive)
     {
-        var song = ChordProParser.Parse("{title: Run Like Hell}\n{x_tuning: Drop D}\n[D]Run");
+        var song = ChordProParser.Parse("{title: Run Like Hell}\n" + directive + "\n[D]Run");
         Assert.Equal("Drop D", song.Tuning);
+    }
+
+    [Fact]
+    public void TuningDownLowersTheKeyYouHearLikeACapoRaisesIt()
+    {
+        // Patience: C shapes, tuned a half step down, sounds in B; with a capo on 1 as well, in C.
+        Assert.Equal("B", ChordTransposer.SoundingKey("C", 0, keyIncludesCapo: false, tuningOffset: -1));
+        Assert.Equal("C", ChordTransposer.SoundingKey("C", 1, keyIncludesCapo: false, tuningOffset: -1));
+        // Across the Universe: D shapes tuned down sound in Db.
+        Assert.Equal("Db", ChordTransposer.SoundingKey("D", 0, keyIncludesCapo: false, tuningOffset: -1));
+        // A key written as heard already includes the tuning.
+        Assert.Equal("Db", ChordTransposer.SoundingKey("Db", 0, keyIncludesCapo: true, tuningOffset: -1));
+        Assert.Equal("D", ChordTransposer.WrittenKey("Db", 0, keyIncludesCapo: true, tuningOffset: -1));
+    }
+
+    [Fact]
+    public void LibrarySongsKnowTheirTuning()
+    {
+        var song = new SongInfo("/x.cho", "Patience", "Guns N' Roses", "C") { Tuning = "Half step down" };
+        Assert.Equal(-1, song.TuningOffset);
+        Assert.Equal(["B"], SongLibrary.Keys([song]).Select(k => k.Key));
     }
 }

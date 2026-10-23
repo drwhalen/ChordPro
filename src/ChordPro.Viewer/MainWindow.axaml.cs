@@ -302,6 +302,7 @@ public partial class MainWindow : Window
         // doing that inside its own click can leave the toolbar unrefreshed.
         TransposeBy = shift => Dispatcher.UIThread.Post(() => SetTranspose(_transpose + shift)),
         Tuning = TuningNote(),
+        TuningOffset = TuningOffset,
     };
 
     private void ShowMessage(string message)
@@ -368,6 +369,9 @@ public partial class MainWindow : Window
     private Instrument CurrentInstrument => CurrentSongTuning?.Apply(PlayerInstrument) ?? PlayerInstrument;
 
     private int TuningOffset => CurrentSongTuning?.Offset ?? 0;
+
+    // A library song's tuning offset: chosen for it in the View menu, or given by the file.
+    private int TuningOffsetOf(SongInfo song) => _settings.Songs.GetValueOrDefault(song.Path)?.TuningOffset ?? song.TuningOffset;
 
     // The song's tuning for its header, when it isn't the player's usual one.
     private string? TuningNote()
@@ -515,7 +519,7 @@ public partial class MainWindow : Window
 
         // Work from the chords as heard, so every suggestion sounds the same as now.
         var sounding = _transpose + FileCapo;
-        var writtenKey = ChordTransposer.WrittenKey(_song.Key, FileCapo, _settings.KeyIncludesCapo);
+        var writtenKey = ChordTransposer.WrittenKey(_song.Key, FileCapo, _settings.KeyIncludesCapo, TuningOffset);
         var preferFlats = ChordTransposer.PrefersFlats(writtenKey, sounding);
         var chords = _song.ChordUsages()
             .Select(c => ChordTransposer.Transpose(_settings.SimplifyChords ? ChordSimplifier.Simplify(c) : c, sounding, preferFlats))
@@ -571,7 +575,7 @@ public partial class MainWindow : Window
         TransposeResetButton.Content = _transpose > 0 ? $"+{_transpose}" : _transpose < 0 ? $"−{-_transpose}" : "0";
         TransposeResetButton.IsEnabled = _transpose != 0;
         // The key as the song's header shows it (what you hear), so a transposition shows where it went.
-        var shownKey = _song?.Key is { } key ? ChordTransposer.Shift(key, _transpose + (_settings.KeyIncludesCapo ? 0 : FileCapo)) : null;
+        var shownKey = _song?.Key is { } key ? ChordTransposer.Shift(key, _transpose + (_settings.KeyIncludesCapo ? 0 : FileCapo + TuningOffset)) : null;
         ShownKeyText.Text = shownKey is null ? "" : $"Key: {shownKey}";
         ShownKeyText.IsVisible = shownKey is not null;
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
@@ -615,7 +619,7 @@ public partial class MainWindow : Window
         var fits = FitsVoiceToggle.IsChecked == true;
         _settings.ForSong(_path).FitsVoice = fits;
         _settings.Save();
-        var key = ChordTransposer.Shift(ChordTransposer.SoundingKey(_song.Key, FileCapo, _settings.KeyIncludesCapo), _transpose);
+        var key = ChordTransposer.Shift(ChordTransposer.SoundingKey(_song.Key, FileCapo, _settings.KeyIncludesCapo, TuningOffset), _transpose);
         StatusText.Text = fits
             ? $"Noted: {_song.Title ?? "this song"}{(key is null ? "" : $" in {key}")} sits well for your voice"
             : $"No longer marked as fitting your voice";
@@ -1671,7 +1675,7 @@ public partial class MainWindow : Window
         // As the song is drawn: moved by its transposition, and on a dulcimer heard without the guitar capo.
         var capo = saved?.Capo ?? (instrument.IsDiatonic ? 0 : song.Capo);
         var shift = (saved?.Transpose ?? 0) + song.Capo - capo;
-        var key = ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo);
+        var key = ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo, TuningOffsetOf(song));
         var written = _settings.SimplifyChords ? song.Chords.Select(ChordSimplifier.Simplify) : song.Chords;
         var chords = InstrumentFit.Transpose(written, shift, key).Distinct().ToList();
         if (InstrumentFit.Check(chords, instrument).AllPlayable)
@@ -2106,7 +2110,7 @@ public partial class MainWindow : Window
         {
             text += info.Title;
             // The key as the song's header will show it, with this song's saved transposition.
-            var sounding = ChordTransposer.SoundingKey(info.Key, info.Capo, _settings.KeyIncludesCapo);
+            var sounding = ChordTransposer.SoundingKey(info.Key, info.Capo, _settings.KeyIncludesCapo, TuningOffsetOf(info));
             if (ChordTransposer.Shift(sounding, _settings.ForSong(next).Transpose) is { } key)
                 text += $" ({key})";
         }
@@ -2224,7 +2228,7 @@ public partial class MainWindow : Window
     {
         var settings = _settings.Songs.GetValueOrDefault(song.Path);
         var capo = settings?.Capo ?? song.Capo;
-        var heard = ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo), settings?.Transpose ?? 0);
+        var heard = ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo, TuningOffsetOf(song)), settings?.Transpose ?? 0);
         return new PlannedSong(song, heard, settings?.Tempo ?? song.Tempo, capo, settings?.Plays ?? 0);
     }
 
