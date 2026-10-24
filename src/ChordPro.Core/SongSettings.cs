@@ -116,12 +116,12 @@ public sealed class LibrarySongSettings
     /// </summary>
     public void Refresh()
     {
-        if (!IsAvailable(out var exists) || !exists)
+        if (!IsAvailable(Folder, out var exists) || !exists)
             return;
         var time = File.GetLastWriteTimeUtc(FilePath);
         if (time == _fileTime)
             return;
-        if (ReadFile() is not { } disk)
+        if (ReadFile(FilePath) is not { } disk)
             return;
         _fileTime = time;
         foreach (var (key, theirs) in disk)
@@ -152,15 +152,8 @@ public sealed class LibrarySongSettings
 
         // Never write over a file that's there but can't be read (an iCloud placeholder, a sync in progress):
         // that would throw away the other device's settings.
-        if (!IsAvailable(out var exists))
+        if (ReadIfAvailable(Folder) is not { } disk)
             return false;
-        Dictionary<string, SongSettings> disk = [];
-        if (exists)
-        {
-            if (ReadFile() is not { } read)
-                return false;
-            disk = read;
-        }
 
         foreach (var (key, theirs) in disk)
         {
@@ -174,9 +167,7 @@ public sealed class LibrarySongSettings
 
         try
         {
-            var temp = FilePath + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(new SettingsFile { Songs = Worth(_songs) }, SongSettingsJson.Default.SettingsFile));
-            File.Move(temp, FilePath, overwrite: true);
+            WriteFile(FilePath, Worth(_songs));
             _fileTime = File.GetLastWriteTimeUtc(FilePath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -209,19 +200,70 @@ public sealed class LibrarySongSettings
         return adopted;
     }
 
-    // The file is readable, or simply not there yet. On a Mac, iCloud may have evicted it to save space,
-    // leaving ".name.icloud" in its place.
-    private bool IsAvailable(out bool exists)
+    /// <summary>
+    /// Merges the settings files of two copies of a library (the library itself and a device's offline copy
+    /// of it) song by song, the newer change winning, and writes the result to whichever differs. Returns
+    /// false when either file couldn't be read or written, leaving both as they were.
+    /// </summary>
+    public static bool MergeFiles(string folderA, string folderB)
     {
-        exists = File.Exists(FilePath);
-        return exists || !File.Exists(Path.Combine(Folder, "." + FileName + ".icloud"));
+        if (ReadIfAvailable(folderA) is not { } a || ReadIfAvailable(folderB) is not { } b)
+            return false;
+        var merged = new Dictionary<string, SongSettings>(a, StringComparer.Ordinal);
+        foreach (var (key, theirs) in b)
+        {
+            if (!merged.TryGetValue(key, out var ours) || (theirs.Modified ?? DateTime.MinValue) > (ours.Modified ?? DateTime.MinValue))
+                merged[key] = theirs;
+        }
+        var text = Serialize(merged);
+        try
+        {
+            foreach (var (folder, before) in new[] { (folderA, a), (folderB, b) })
+            {
+                if (Serialize(before) != text)
+                    WriteFile(Path.Combine(folder, FileName), merged);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+        return true;
     }
 
-    private Dictionary<string, SongSettings>? ReadFile()
+    // The file is readable, or simply not there yet. On a Mac, iCloud may have evicted it to save space,
+    // leaving ".name.icloud" in its place.
+    private static bool IsAvailable(string folder, out bool exists)
+    {
+        exists = File.Exists(Path.Combine(folder, FileName));
+        return exists || !File.Exists(Path.Combine(folder, "." + FileName + ".icloud"));
+    }
+
+    // The folder's settings (none when it has no file yet), or null when there's a file that can't be read.
+    private static Dictionary<string, SongSettings>? ReadIfAvailable(string folder)
+    {
+        if (!IsAvailable(folder, out var exists))
+            return null;
+        return exists ? ReadFile(Path.Combine(folder, FileName)) : new(StringComparer.Ordinal);
+    }
+
+    // Written beside the file and moved over it, so a reader (or a sync) never sees half a file.
+    private static void WriteFile(string path, Dictionary<string, SongSettings> songs)
+    {
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, Serialize(songs));
+        File.Move(temp, path, overwrite: true);
+    }
+
+    private static string Serialize(Dictionary<string, SongSettings> songs) =>
+        JsonSerializer.Serialize(new SettingsFile { Songs = songs.OrderBy(s => s.Key, StringComparer.Ordinal).ToDictionary(StringComparer.Ordinal) },
+            SongSettingsJson.Default.SettingsFile);
+
+    private static Dictionary<string, SongSettings>? ReadFile(string path)
     {
         try
         {
-            var file = JsonSerializer.Deserialize(File.ReadAllText(FilePath), SongSettingsJson.Default.SettingsFile);
+            var file = JsonSerializer.Deserialize(File.ReadAllText(path), SongSettingsJson.Default.SettingsFile);
             return new Dictionary<string, SongSettings>(file?.Songs ?? [], StringComparer.Ordinal);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -233,9 +275,7 @@ public sealed class LibrarySongSettings
     // A song that's back to its defaults is still written once it has been saved, so that resetting it
     // reaches the other devices; a song only looked at is not.
     private static Dictionary<string, SongSettings> Worth(Dictionary<string, SongSettings> songs) =>
-        songs.Where(s => s.Value.Modified is not null || !IsDefault(s.Value))
-            .OrderBy(s => s.Key, StringComparer.Ordinal)
-            .ToDictionary(StringComparer.Ordinal);
+        songs.Where(s => s.Value.Modified is not null || !IsDefault(s.Value)).ToDictionary(StringComparer.Ordinal);
 
     private bool IsChanged(string key, SongSettings settings) =>
         Snapshot(settings) != (_saved.GetValueOrDefault(key) ?? DefaultSnapshot);

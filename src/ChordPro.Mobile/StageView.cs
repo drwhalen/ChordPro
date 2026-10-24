@@ -1,4 +1,3 @@
-using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -11,48 +10,57 @@ using ChordPro.UI;
 namespace ChordPro.Mobile;
 
 /// <summary>
-/// The first stage screen: a bundled song with text size, transpose and theme, paged by taps or a pedal.
-/// A spike to see the shared renderer on iPad and iPhone before the real app is built around it.
+/// A song on stage, with text size, transpose and theme, paged by taps or a pedal. Transpose and text size
+/// are the song's own settings, shared with the Mac through the library.
 /// </summary>
-public sealed class StageView : UserControl
+internal sealed class StageView : UserControl
 {
     private const double TwoColumnMinWidth = 1000;
+    // The Mac's usual text size; a size saved there is shown here in proportion to this device's usual size.
+    private const double MacFontSize = 16;
 
+    private readonly Song _song;
+    private readonly SongSettings _songSettings;
+    private readonly MobileSettings _settings;
+    private readonly Action _saved;
+    private readonly bool _keyIncludesCapo;
     private readonly ScrollViewer _scroller = new() { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
-    private readonly ComboBox _songBox = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _transposeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 28, TextAlignment = TextAlignment.Center };
     private readonly Border _bar = new() { Padding = new Thickness(8, 6) };
-    private readonly List<(string Name, Song Song)> _songs = LoadSamples();
-
-    private Song _song;
-    private double _fontSize;
-    private int _transpose;
-    private int _theme = 1; // Night
+    private readonly double _deviceFontSize =
+        UIKit.UIDevice.CurrentDevice.UserInterfaceIdiom == UIKit.UIUserInterfaceIdiom.Phone ? 17 : 22;
     private int _columns = 1;
 
-    public StageView()
+    /// <param name="saved">Called after the song's settings change, to share them.</param>
+    public StageView(Song song, SongSettings songSettings, MobileSettings settings, bool keyIncludesCapo, Action back, Action saved)
     {
-        _song = _songs[0].Song;
-        _songBox.ItemsSource = _songs.Select(s => s.Name).ToList();
-        _songBox.SelectedIndex = 0;
-        _songBox.SelectionChanged += (_, _) =>
-        {
-            _song = _songs[Math.Max(0, _songBox.SelectedIndex)].Song;
-            _transpose = 0;
-            Render();
-            _scroller.Offset = default;
-        };
+        _song = song;
+        _songSettings = songSettings;
+        _settings = settings;
+        _keyIncludesCapo = keyIncludesCapo;
+        _saved = saved;
 
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right };
-        buttons.Children.Add(Button("A−", () => _fontSize = Math.Max(12, _fontSize - 2)));
-        buttons.Children.Add(Button("A+", () => _fontSize = Math.Min(48, _fontSize + 2)));
-        buttons.Children.Add(Button("−", () => _transpose--));
+        var backButton = MakeButton("‹ Songs", back);
+        var title = new TextBlock
+        {
+            Text = song.Title,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(8, 0),
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        buttons.Children.Add(MakeButton("A−", () => ChangeFont(-2)));
+        buttons.Children.Add(MakeButton("A+", () => ChangeFont(+2)));
+        buttons.Children.Add(MakeButton("−", () => ChangeTranspose(-1)));
         buttons.Children.Add(_transposeText);
-        buttons.Children.Add(Button("+", () => _transpose++));
-        buttons.Children.Add(Button("Theme", () => _theme = (_theme + 1) % SongTheme.BuiltIn.Count));
-        var barContent = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        barContent.Children.Add(_songBox);
-        Grid.SetColumn(buttons, 1);
+        buttons.Children.Add(MakeButton("+", () => ChangeTranspose(+1)));
+        buttons.Children.Add(MakeButton("Theme", NextTheme));
+        var barContent = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        barContent.Children.Add(backButton);
+        Grid.SetColumn(title, 1);
+        barContent.Children.Add(title);
+        Grid.SetColumn(buttons, 2);
         barContent.Children.Add(buttons);
         _bar.Child = barContent;
 
@@ -67,35 +75,42 @@ public sealed class StageView : UserControl
         _scroller.AddHandler(TappedEvent, (_, e) => Page(e.GetPosition(_scroller).Y > _scroller.Bounds.Height / 3 ? +1 : -1));
     }
 
-    private Button Button(string text, Action change)
+    private double SongFontSize => _songSettings.FontSize is { } saved ? saved / MacFontSize * _deviceFontSize : _deviceFontSize;
+
+    private Button MakeButton(string text, Action action)
     {
-        var button = new Button
-        {
-            Content = text,
-            MinWidth = 44,
-            MinHeight = 44,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        button.Click += (_, _) =>
-        {
-            change();
-            Render();
-        };
+        var button = new Button { Content = text };
+        button.Click += (_, _) => action();
         return button;
+    }
+
+    private void ChangeFont(double step)
+    {
+        var size = Math.Clamp(SongFontSize + step, 12, 48);
+        _songSettings.FontSize = Math.Abs(size - _deviceFontSize) < 0.5 ? null : size / _deviceFontSize * MacFontSize;
+        _saved();
+        Render();
+    }
+
+    private void ChangeTranspose(int step)
+    {
+        _songSettings.Transpose += step;
+        _saved();
+        Render();
+    }
+
+    private void NextTheme()
+    {
+        var themes = SongTheme.BuiltIn;
+        var index = themes.ToList().FindIndex(t => t.Name == _settings.Theme);
+        _settings.Theme = themes[(index + 1) % themes.Count].Name;
+        _settings.Save();
+        Render();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        // A phone has room for about 40 characters a line at 17 points; an iPad takes stage-size text.
-        _fontSize = UIKit.UIDevice.CurrentDevice.UserInterfaceIdiom == UIKit.UIUserInterfaceIdiom.Phone ? 17 : 22;
-        // Keep clear of the notch, the Dynamic Island and the home indicator.
-        if (TopLevel.GetTopLevel(this)?.InsetsManager is { } insets)
-        {
-            Padding = insets.SafeAreaPadding;
-            insets.SafeAreaChanged += (_, args) => Padding = args.SafeAreaPadding;
-        }
         Render();
         Focus();
     }
@@ -129,35 +144,24 @@ public sealed class StageView : UserControl
 
     private void Render()
     {
-        var theme = SongTheme.BuiltIn[_theme];
+        var theme = MainView.CurrentTheme(_settings);
         WindowTheme.Apply(theme);
         var palette = SongPalette.FromTheme(theme);
         Background = _scroller.Background = palette.Background;
         _bar.Background = palette.CommentBackground;
-        _transposeText.Text = _transpose == 0 ? "0" : _transpose.ToString("+0;−0");
+        var transpose = _songSettings.Transpose;
+        _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
         _columns = Bounds.Width >= TwoColumnMinWidth ? 2 : 1;
 
         var options = new RenderOptions
         {
-            FontSize = _fontSize,
-            Transpose = _transpose,
+            FontSize = SongFontSize,
+            Transpose = transpose,
+            Capo = _songSettings.Capo,
             Columns = _columns,
             Palette = palette,
+            KeyIncludesCapo = _keyIncludesCapo,
         };
         _scroller.Content = new Border { Padding = new Thickness(16, 12), Child = new SongRenderer(options).Render(_song) };
-    }
-
-    private static List<(string, Song)> LoadSamples()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        return [.. assembly.GetManifestResourceNames()
-            .Where(n => n.StartsWith("samples/", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .Select(n =>
-            {
-                using var reader = new StreamReader(assembly.GetManifestResourceStream(n)!);
-                var song = ChordProParser.Parse(reader.ReadToEnd());
-                return (song.Title ?? Path.GetFileNameWithoutExtension(n), song);
-            })];
     }
 }
