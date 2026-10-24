@@ -8,7 +8,7 @@
     <key>CFBundleDisplayName</key>
     <string>ChordPro Viewer</string>
     <key>CFBundleIdentifier</key>
-    <string>com.drwhalen.chordpro-viewer</string>
+    <string>com.cranberrysoftware.chordpro-viewer</string>
     <key>CFBundleExecutable</key>
     <string>ChordPro.Viewer</string>
     <key>CFBundleIconFile</key>
@@ -56,7 +56,7 @@
             <string>Owner</string>
             <key>LSItemContentTypes</key>
             <array>
-                <string>com.drwhalen.chordpro-viewer.setlist</string>
+                <string>com.cranberrysoftware.chordpro-viewer.setlist</string>
             </array>
         </dict>
     </array>
@@ -88,7 +88,7 @@
     <array>
         <dict>
             <key>UTTypeIdentifier</key>
-            <string>com.drwhalen.chordpro-viewer.setlist</string>
+            <string>com.cranberrysoftware.chordpro-viewer.setlist</string>
             <key>UTTypeDescription</key>
             <string>ChordPro Viewer Setlist</string>
             <key>UTTypeConformsTo</key>

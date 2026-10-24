@@ -8,7 +8,7 @@ using ChordPro.Core;
 using ChordPro.Core.Chords;
 using ChordPro.Core.Themes;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>The brushes a song is drawn with, made from a <see cref="SongTheme"/>.</summary>
 public sealed record SongPalette(IBrush Background, IBrush Text, IBrush MutedText, IBrush Chord,

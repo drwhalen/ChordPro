@@ -4,7 +4,7 @@ using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using ChordPro.Core.Themes;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>
 /// Applies a theme to the app's controls (toolbar, lists, dialogs). Day and Night use the standard

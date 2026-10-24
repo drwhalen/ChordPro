@@ -4,7 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using ChordPro.Core.Chords;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>A chord's diagram with arrows to page through alternate fingerings.</summary>
 public sealed class ChordPopup : UserControl

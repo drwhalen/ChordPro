@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using ChordPro.Core.Chords;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>Draws a fretboard diagram for one chord shape, with the chord name above it.</summary>
 public sealed class ChordDiagram : Control

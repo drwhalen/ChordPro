@@ -6,7 +6,9 @@ Guidance for working in this repository. See README.md for the user-facing featu
 
 ChordPro Viewer: a cross-platform .NET 10 desktop app (Avalonia 11.3) that displays ChordPro song files,
 with a built-in text editor and live preview, transposition, capo, chord diagrams, themes, setlists, smart scrolling, a tuner and PDF
-export. The developer works on macOS (Apple Silicon); WPF/WinForms are not options.
+export. The developer works on macOS (Apple Silicon); WPF/WinForms are not options. An iPad/iPhone app
+for playing live (`ChordPro.Mobile`, Avalonia iOS) is being built on the same Core: read-only songs, no
+editor, new songs or voice features (those stay on the Mac).
 
 ## Commands
 
@@ -15,6 +17,7 @@ dotnet build                                   # whole solution (ChordPro.slnx)
 dotnet test                                    # Core unit tests (xUnit)
 dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
 scripts/package-mac.sh [arm64|x64]             # artifacts/ChordPro Viewer.app + .zip + .dmg
+dotnet build src/ChordPro.Mobile               # iOS app (simulator); not in the .slnx, needs Xcode + `ios` workload
 ```
 
 Keep the build at zero warnings. NuGet versions are pinned exactly (Avalonia 11.3.20 for every
@@ -49,16 +52,23 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     places heard words in the lyrics for Follow voice; `VoiceTuning` — Follow voice settings;
     `VoiceTraining` — reference timeline, replay and scoring for training),
     `Tuning/` (`PitchDetector` — YIN, `Note`)
-- `src/ChordPro.Viewer` — Avalonia UI. `MainWindow` wires everything; `SongRenderer` builds the song as
-  controls from `RenderOptions` (also exposes `Groups` for pagination and `LineControls` for scrolling);
+- `src/ChordPro.UI` — Avalonia controls shared by the Mac and iOS apps (namespace `ChordPro.UI`):
+  `SongRenderer` builds the song as controls from `RenderOptions` (also exposes `Groups` for pagination
+  and `LineControls` for scrolling); `ChordDiagram`, `ChordPopup`, `WindowTheme` (recolors Fluent
+  controls). Core and UI are `IsTrimmable`, since the iOS build is trimmed: no reflection-based JSON.
+  `RenderOptions` clashes with `Avalonia.Media.RenderOptions`, so the apps alias it in their csproj.
+- `src/ChordPro.Viewer` — the Mac app. `MainWindow` wires everything;
   `SmartScroller` + `ScrollTimelineBuilder` (scroll modes); `PdfExporter` (Skia vector PDF);
-  `WindowTheme` (recolors Fluent controls); `ThemeEditorWindow`, `TunerWindow`, `ChordPopup`,
-  `ChordDiagram`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
+  `ThemeEditorWindow`, `TunerWindow`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
   on-device) + `SpeechModel` (one-time model download); `Transcriber` (Whisper windows and whole
   recordings with word times), `VoiceTrainer` + `VoiceTrainingWindow` (Train…), `AudioFile` (WAV, or
   afconvert on macOS); `ChoiceDialog` (Save / Don't Save / Cancel);
   `SetlistSuggestWindow` (Suggest a set);
   `AppSettings` (JSON).
+- `src/ChordPro.Mobile` — the iPad/iPhone app (`net10.0-ios`, `Avalonia.iOS`): `App`, `AppDelegate`,
+  `StageView` (for now a spike: bundled samples, text size, transpose, theme, tap/pedal paging).
+  The samples are embedded for the first launch and App Store review. It suppresses IL2037/IL2104,
+  which come from Avalonia's own iOS and designer assemblies.
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
 - `samples/` — `amazing-grace.cho` (timed markers), `morning-road.cho` (musical bars, capo, `{define}`),
   `sample.setlist`. Song lyrics in samples must be public domain or original.
@@ -131,5 +141,16 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `codesign --verify` fails. Finder opens files through `IActivatableLifetime` / `FileActivatedEventArgs`
   (handled in `App`), not command-line arguments. `packaging/macos/Info.plist` holds the bundle ID,
   document types and microphone usage text; the icon is generated from `Assets/AppIcon.png`.
+- **iOS app (`ChordPro.Mobile`):**
+  - The iOS 27 SDK refuses to launch apps without the UIScene life cycle, which Avalonia 11.3's
+    `AvaloniaAppDelegate` predates: `Info.plist` names a `SceneDelegate` that moves Avalonia's window into
+    the scene. Avalonia's lifetime interfaces can't be implemented outside Avalonia.
+  - An incremental build may not pick up `Info.plist` changes; delete `bin`/`obj` after editing it.
+  - The .NET SDK is Homebrew's, so workloads install user-local (`~/.dotnet`) without sudo; if a build
+    says the `ios` workload is missing although `dotnet workload list` shows it, run `dotnet workload repair`.
+  - Simulator: `xcrun simctl boot <udid>`, `simctl install <udid> src/ChordPro.Mobile/bin/Debug/net10.0-ios/iossimulator-arm64/ChordPro.Mobile.app`,
+    `simctl launch --console <udid> com.cranberrysoftware.chordpro-live`, `simctl io <udid> screenshot x.png`. These
+    run headless (no Simulator window). The first launch on a fresh simulator can be black for ~20 s.
+    `log show --predicate 'process == "ChordPro.Mobile"'` via `simctl spawn` has the launch errors.
 - Python `str.replace` in edit scripts fails silently on a mismatch; assert the old text occurs exactly
   once before replacing.

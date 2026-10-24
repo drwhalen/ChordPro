@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- The iOS app is trimmed: this flags anything here that trimming would break. -->
+    <IsTrimmable>true</IsTrimmable>
   </PropertyGroup>
 
 </Project>

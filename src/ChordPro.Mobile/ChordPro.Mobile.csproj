@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The iPad and iPhone app, for playing songs live. Songs are written and prepared in the Mac app. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationTitle>ChordPro Live</ApplicationTitle>
+    <ApplicationId>com.cranberrysoftware.chordpro-live</ApplicationId>
+    <ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <!-- Avalonia's own iOS and designer assemblies trip the trimmer (IL2037 in the generated registrar
+         code, IL2104 for Avalonia.DesignerSupport); ChordPro.Core and ChordPro.UI are trimmable and
+         report their own warnings individually. -->
+    <NoWarn>$(NoWarn);IL2037;IL2104</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Public-domain and original songs, for the first launch (and App Store review) before a library is chosen. -->
+    <EmbeddedResource Include="..\..\samples\*.cho" LogicalName="samples/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.iOS" Version="11.3.20" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ChordPro.Core\ChordPro.Core.csproj" />
+    <ProjectReference Include="..\ChordPro.UI\ChordPro.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="ChordPro.UI.RenderOptions" Alias="RenderOptions" />
+  </ItemGroup>
+
+</Project>

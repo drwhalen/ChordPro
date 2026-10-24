@@ -27,6 +27,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ChordPro.Core\ChordPro.Core.csproj" />
+    <ProjectReference Include="..\ChordPro.UI\ChordPro.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="ChordPro.UI" />
+    <!-- Not Avalonia.Media.RenderOptions, which files here also import. -->
+    <Using Include="ChordPro.UI.RenderOptions" Alias="RenderOptions" />
   </ItemGroup>
 
 </Project>
