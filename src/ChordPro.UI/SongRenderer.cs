@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using ChordPro.Core;
 using ChordPro.Core.Chords;
+using ChordPro.Core.Layout;
 using ChordPro.Core.Themes;
 
 namespace ChordPro.UI;
@@ -87,6 +89,38 @@ public sealed partial class SongRenderer(RenderOptions options)
     /// with its lyric). Used to choose page breaks and page turns.
     /// </summary>
     public List<(IReadOnlyList<Control> Lines, bool KeepWithNext)> Groups { get; } = [];
+
+    /// <summary>The <see cref="Groups"/> with each line's position within <paramref name="root"/>.</summary>
+    public List<PageGroup> PageGroups(Visual root) =>
+        [.. Groups.Select(g => new PageGroup(
+            [.. g.Lines.Select(line => new LineExtent(TopOf(line, root), TopOf(line, root) + line.Bounds.Height))],
+            g.KeepWithNext))];
+
+    /// <summary>How far down <paramref name="root"/> a visual inside it is.</summary>
+    public static double TopOf(Visual visual, Visual root)
+    {
+        var y = 0.0;
+        for (Visual? v = visual; v is not null && v != root; v = v.GetVisualParent())
+            y += v.Bounds.Y;
+        return y;
+    }
+
+    /// <summary>
+    /// Where a page turn (+1 down, −1 up) from <paramref name="offset"/> should move the view: to a line
+    /// boundary, keeping a chorus together where it fits on screen. Null with two columns, where there's
+    /// no single top-to-bottom order of lines.
+    /// </summary>
+    public double? PageTop(int direction, double offset, double viewportHeight, Visual root)
+    {
+        if (options.Columns > 1)
+            return null;
+        var groups = PageGroups(root);
+        var target = direction > 0
+            ? PageLayout.NextPageTop(groups, offset, viewportHeight) ?? double.MaxValue
+            : PageLayout.PreviousPageTop(groups, offset, viewportHeight);
+        // Leave a little room above the new top line rather than pressing it against the edge.
+        return target is > 0 and < double.MaxValue ? target - FontSize * 0.5 : target;
+    }
 
     /// <summary>The control showing each line, keyed by section and line index (hidden lines are absent).</summary>
     public Dictionary<(Section, int), Control> LineControls { get; } = [];

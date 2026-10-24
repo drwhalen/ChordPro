@@ -50,7 +50,7 @@ public static class PdfExporter
         using var document = SKDocument.CreatePdf(stream, new SKDocumentPdfMetadata { Title = name, Creator = "ChordPro Viewer" });
 
         var (cover, rows) = Cover(name, entries);
-        await WriteAsync(document, cover, [.. rows.Select(r => new PageGroup([new LineExtent(TopOf(r, cover), TopOf(r, cover) + r.Bounds.Height)], false))], name);
+        await WriteAsync(document, cover, [.. rows.Select(r => new PageGroup([new LineExtent(SongRenderer.TopOf(r, cover), SongRenderer.TopOf(r, cover) + r.Bounds.Height)], false))], name);
 
         var number = 0;
         foreach (var entry in entries.Where(e => !e.IsDivider))
@@ -65,7 +65,7 @@ public static class PdfExporter
         var root = renderer.Render(song);
         root.Measure(new Size(ContentWidth, double.PositiveInfinity));
         root.Arrange(new Rect(0, 0, ContentWidth, root.DesiredSize.Height));
-        await WriteAsync(document, root, PageGroups(renderer, root), footer);
+        await WriteAsync(document, root, renderer.PageGroups(root), footer);
     }
 
     // Draws root once, then places a slice of it on each page, breaking where the groups allow.
@@ -182,19 +182,5 @@ public static class PdfExporter
     {
         DockPanel.SetDock(control, dock);
         return control;
-    }
-
-    /// <summary>The renderer's groups with each line's position within <paramref name="root"/>.</summary>
-    public static List<PageGroup> PageGroups(SongRenderer renderer, Visual root) =>
-        [.. renderer.Groups.Select(g => new PageGroup(
-            [.. g.Lines.Select(line => new LineExtent(TopOf(line, root), TopOf(line, root) + line.Bounds.Height))],
-            g.KeepWithNext))];
-
-    public static double TopOf(Visual visual, Visual root)
-    {
-        var y = 0.0;
-        for (Visual? v = visual; v is not null && v != root; v = v.GetVisualParent())
-            y += v.Bounds.Y;
-        return y;
     }
 }

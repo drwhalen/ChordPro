@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using ChordPro.Core.Scrolling;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 public enum ScrollMode
 {

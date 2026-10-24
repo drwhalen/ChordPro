@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using ChordPro.Core;
+using ChordPro.Core.Scrolling;
 using ChordPro.Core.Themes;
 using ChordPro.UI;
 
@@ -15,27 +18,44 @@ namespace ChordPro.Mobile;
 internal sealed record SetlistPlace(string? Next, bool HasPrevious, Action<int> Step);
 
 /// <summary>
-/// A song on stage, with text size, transpose and theme, paged by taps or a pedal. Transpose and text size
-/// are the song's own settings, shared with the Mac through the library.
+/// A song on stage: paged by taps or a pedal, or scrolled (timed to its length, or musically by its tempo
+/// and bars), with text size, transpose and theme. Its settings are shared with the Mac through the library.
 /// </summary>
 internal sealed class StageView : UserControl
 {
     private const double TwoColumnMinWidth = 1000;
     // The Mac's usual text size; a size saved there is shown here in proportion to this device's usual size.
     private const double MacFontSize = 16;
+    private const double MinScrollSpeed = 0.2, MaxScrollSpeed = 4, ScrollSpeedStep = 0.1;
+    private const double MinTempo = 30, MaxTempo = 300, TempoStep = 2;
+    private static readonly ScrollMode[] Modes = [ScrollMode.Manual, ScrollMode.Timed, ScrollMode.Musical];
 
     private readonly Song _song;
+    private readonly MusicalTimeline _musical;
     private readonly SongSettings _songSettings;
     private readonly MobileSettings _settings;
     private readonly Action _saved;
     private readonly bool _keyIncludesCapo;
     private readonly SetlistPlace? _place;
-    private readonly Border _footer = new() { Padding = new Thickness(8, 6) };
-    private readonly ScrollViewer _scroller = new() { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
-    private readonly TextBlock _transposeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 28, TextAlignment = TextAlignment.Center };
+    private readonly ScrollViewer _scroller = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private readonly SmartScroller _smart;
+    private readonly Border _content = new() { Padding = new Thickness(16, 12) };
+    // Marks the line being played while scrolling musically.
+    private readonly Border _readingMarker = new() { Width = 4, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, IsVisible = false };
     private readonly Border _bar = new() { Padding = new Thickness(8, 6) };
+    private readonly Border _footer = new() { Padding = new Thickness(8, 6) };
+    private readonly Button _play = new();
+    private readonly TextBlock _transposeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 36, TextAlignment = TextAlignment.Center };
+    private readonly TextBlock _speedText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 72, TextAlignment = TextAlignment.Center };
+    private readonly StackPanel _speedRow = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+    private readonly TextBlock _scrollHint = new() { FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxWidth = 280 };
+    private readonly Button _tapTempo = new() { Content = "Tap tempo" };
+    private readonly ToggleButton[] _modeButtons;
     private readonly double _deviceFontSize =
         UIKit.UIDevice.CurrentDevice.UserInterfaceIdiom == UIKit.UIUserInterfaceIdiom.Phone ? 17 : 22;
+    private readonly TapTempo _taps = new();
+    private readonly Stopwatch _tapClock = Stopwatch.StartNew();
+    private SongRenderer? _renderer;
     private int _columns = 1;
 
     /// <param name="saved">Called after the song's settings change, to share them.</param>
@@ -43,14 +63,29 @@ internal sealed class StageView : UserControl
     public StageView(Song song, SongSettings songSettings, MobileSettings settings, bool keyIncludesCapo,
         string backLabel, Action back, Action saved, SetlistPlace? place = null)
     {
-        _place = place;
         _song = song;
+        _musical = MusicalTimeline.Build(song);
         _songSettings = songSettings;
         _settings = settings;
         _keyIncludesCapo = keyIncludesCapo;
         _saved = saved;
+        _place = place;
+        _smart = new SmartScroller(_scroller)
+        {
+            TimelineFactory = BuildTimeline,
+            PageTarget = (direction, offset, height) => _renderer?.PageTop(direction, offset, height, _content),
+        };
+        _smart.RunningChanged += (_, _) => UpdateScrollControls();
 
-        var backButton = MakeButton($"‹ {backLabel}", back);
+        _play.Click += (_, _) => _smart.Toggle();
+        _tapTempo.Click += (_, _) => TapTempo();
+        _modeButtons = [.. Modes.Select(mode =>
+        {
+            var button = new ToggleButton { Content = mode.ToString() };
+            button.Click += (_, _) => SetMode(mode);
+            return button;
+        })];
+
         var title = new TextBlock
         {
             Text = song.Title,
@@ -60,14 +95,11 @@ internal sealed class StageView : UserControl
             Margin = new Thickness(8, 0),
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        buttons.Children.Add(MakeButton("A−", () => ChangeFont(-2)));
-        buttons.Children.Add(MakeButton("A+", () => ChangeFont(+2)));
-        buttons.Children.Add(MakeButton("−", () => ChangeTranspose(-1)));
-        buttons.Children.Add(_transposeText);
-        buttons.Children.Add(MakeButton("+", () => ChangeTranspose(+1)));
-        buttons.Children.Add(MakeButton("Theme", NextTheme));
+        buttons.Children.Add(_play);
+        buttons.Children.Add(new Button { Content = "Scroll ▾", Flyout = new Flyout { Content = ScrollPanel() } });
+        buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = new Flyout { Content = TextPanel() } });
         var barContent = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
-        barContent.Children.Add(backButton);
+        barContent.Children.Add(MakeButton($"‹ {backLabel}", back));
         Grid.SetColumn(title, 1);
         barContent.Children.Add(title);
         Grid.SetColumn(buttons, 2);
@@ -93,22 +125,57 @@ internal sealed class StageView : UserControl
             DockPanel.SetDock(_footer, Dock.Bottom);
             root.Children.Add(_footer);
         }
-        root.Children.Add(_scroller);
+        _scroller.Content = _content;
+        root.Children.Add(new Grid { Children = { _scroller, _readingMarker } });
         Content = root;
 
         Focusable = true;
         // A tap on the lower part of the song turns the page forward, on the upper part back, as on the Mac.
         _scroller.AddHandler(TappedEvent, (_, e) => Page(e.GetPosition(_scroller).Y > _scroller.Bounds.Height / 3 ? +1 : -1));
+        UpdateScrollControls();
     }
+
+    private ScrollMode Mode => Enum.TryParse<ScrollMode>(_songSettings.ScrollMode, out var mode) && Modes.Contains(mode) ? mode : ScrollMode.Timed;
+
+    private double Speed => _songSettings.ScrollSpeed ?? 1;
+
+    private double Tempo => _songSettings.Tempo ?? _musical.Tempo;
 
     private double SongFontSize => _songSettings.FontSize is { } saved ? saved / MacFontSize * _deviceFontSize : _deviceFontSize;
 
-    private Button MakeButton(string text, Action action)
+    private static Button MakeButton(string text, Action action)
     {
         var button = new Button { Content = text };
         button.Click += (_, _) => action();
         return button;
     }
+
+    private static StackPanel Row(params Control[] children)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.AddRange(children);
+        return row;
+    }
+
+    // Scroll ▾: the mode, its speed or tempo, and tap tempo.
+    private Control ScrollPanel()
+    {
+        _speedRow.Children.AddRange([MakeButton("−", () => StepSpeed(-1)), _speedText, MakeButton("+", () => StepSpeed(+1)), _tapTempo]);
+        return new StackPanel { Spacing = 10, Children = { Row(_modeButtons), _speedRow, _scrollHint } };
+    }
+
+    // Aa ▾: text size, transpose and theme.
+    private Control TextPanel() => new StackPanel
+    {
+        Spacing = 10,
+        Children =
+        {
+            Row(MakeButton("A−", () => ChangeFont(-2)), MakeButton("A+", () => ChangeFont(+2))),
+            Row(new TextBlock { Text = "Transpose", VerticalAlignment = VerticalAlignment.Center },
+                MakeButton("−", () => ChangeTranspose(-1)), _transposeText, MakeButton("+", () => ChangeTranspose(+1))),
+            MakeButton("Next theme", NextTheme),
+        },
+    };
 
     private void ChangeFont(double step)
     {
@@ -134,47 +201,143 @@ internal sealed class StageView : UserControl
         Render();
     }
 
+    // The mode is the song's own, as on the Mac (where no setting means Timed).
+    private void SetMode(ScrollMode mode)
+    {
+        _smart.Stop();
+        _songSettings.ScrollMode = mode == ScrollMode.Timed ? null : mode.ToString();
+        _saved();
+        UpdateScrollControls();
+        Render(); // two columns only make sense when nothing follows the lines
+    }
+
+    private void StepSpeed(int direction)
+    {
+        if (Mode == ScrollMode.Timed)
+        {
+            var speed = Math.Round(Math.Clamp(Speed + direction * ScrollSpeedStep, MinScrollSpeed, MaxScrollSpeed), 1);
+            _songSettings.ScrollSpeed = Math.Abs(speed - 1) < 0.01 ? null : speed;
+        }
+        else
+        {
+            SetTempo(Math.Clamp(Math.Round(Tempo) + direction * TempoStep, MinTempo, MaxTempo));
+        }
+        _saved();
+        UpdateScrollControls();
+    }
+
+    // Each tap after the first sets the tempo from the beat tapped so far (remembered for the song).
+    private void TapTempo()
+    {
+        if (_taps.Tap(_tapClock.Elapsed) is not { } tapped)
+        {
+            _scrollHint.Text = "Keep tapping on the beat…";
+            return;
+        }
+        SetTempo(Math.Clamp(Math.Round(tapped), MinTempo, MaxTempo));
+        _saved();
+        UpdateScrollControls();
+        _scrollHint.Text = $"Tempo {Tempo:0} BPM from {_taps.Count} taps";
+    }
+
+    private void SetTempo(double tempo) =>
+        _songSettings.Tempo = Math.Abs(tempo - _musical.Tempo) < 0.5 ? null : tempo;
+
+    private void UpdateScrollControls()
+    {
+        var mode = Mode;
+        for (var i = 0; i < Modes.Length; i++)
+            _modeButtons[i].IsChecked = Modes[i] == mode;
+        _play.IsVisible = _speedRow.IsVisible = mode != ScrollMode.Manual;
+        _play.Content = _smart.IsRunning ? "❚❚" : "▶";
+        _speedText.Text = mode == ScrollMode.Timed ? $"{Speed:0.0}×" : $"{Tempo:0} BPM";
+        _tapTempo.IsVisible = mode == ScrollMode.Musical;
+        _scrollHint.Text = mode switch
+        {
+            ScrollMode.Manual => "Turn pages by tapping the top or bottom of the song, or with a pedal.",
+            ScrollMode.Timed when TimeMarkers.Find(_song).Count > 0 => "Paced by the song's time markers.",
+            ScrollMode.Timed when _song.Duration is { } duration => $"Paced to finish in {duration} at 1.0×.",
+            ScrollMode.Timed => "The song has no {duration}, so it scrolls at a steady speed.",
+            _ when !_musical.TempoFromSong && _songSettings.Tempo is null =>
+                $"The song has no {{tempo}}, so {MusicalTimeline.DefaultTempo:0} BPM is assumed; tap along to set one.",
+            _ => _songSettings.Tempo is null ? "Line by line at the song's tempo." : $"Changed from the song's {_musical.Tempo:0} BPM.",
+        };
+        _readingMarker.IsVisible = _smart.IsRunning && mode == ScrollMode.Musical;
+        _smart.Rate = mode == ScrollMode.Timed ? Speed : Tempo / _musical.Tempo;
+    }
+
+    private ScrollTimeline? BuildTimeline()
+    {
+        if (_renderer is null)
+            return null;
+        var maxOffset = Math.Max(0, _scroller.Extent.Height - _scroller.Viewport.Height);
+        var builder = new ScrollTimelineBuilder(_song, _renderer.LineControls, _content, _scroller.Viewport.Height, maxOffset);
+        _readingMarker.Margin = new Thickness(4, builder.ReadingLineY - SongFontSize * 0.2, 0, 0);
+        _readingMarker.Height = SongFontSize * 2.4;
+        return Mode switch
+        {
+            ScrollMode.Timed => builder.Timed(),
+            ScrollMode.Musical => builder.Musical(_musical),
+            _ => null,
+        };
+    }
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         Render();
         Focus();
+#if DEBUG
+        // For simulator checks: scroll in a mode as soon as the song is laid out (SIMCTL_CHILD_CHORDPRO_LIVE_SCROLL=Musical).
+        if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SCROLL") is { } name && Enum.TryParse<ScrollMode>(name, out var mode))
+        {
+            SetMode(mode);
+            Avalonia.Threading.DispatcherTimer.RunOnce(_smart.Start, TimeSpan.FromSeconds(1));
+        }
+#endif
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _smart.Stop();
+        base.OnDetachedFromVisualTree(e);
     }
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
-        // Two columns on a wide screen (an iPad in landscape), one otherwise.
-        if ((e.NewSize.Width >= TwoColumnMinWidth ? 2 : 1) != _columns)
+        if (ColumnsFor(e.NewSize.Width) != _columns)
             Render();
+        _smart.InvalidateTimeline();
     }
 
-    // Page turners send arrow keys, Page Up/Down or Space. With a two-button pedal, forward and back are
-    // all there is, so they also move through the setlist at either end of a song.
+    // Two columns on a wide screen (an iPad in landscape), but only when paging by hand: scrolling follows
+    // the lines top to bottom.
+    private int ColumnsFor(double width) => width >= TwoColumnMinWidth && Mode == ScrollMode.Manual ? 2 : 1;
+
+    // Pedals send arrow keys, Page Up/Down or Space. With a two-button pedal, forward and back are all there
+    // is, so they also move through the setlist at either end of a song. Space starts and stops scrolling.
     protected override void OnKeyDown(KeyEventArgs e)
     {
         switch (e.Key)
         {
-            case Key.Down or Key.Right or Key.PageDown or Key.Space: Page(+1, orSong: true); break;
-            case Key.Up or Key.Left or Key.PageUp: Page(-1, orSong: true); break;
+            case Key.Space when Mode != ScrollMode.Manual: _smart.Toggle(); break;
+            case Key.Down or Key.Right or Key.PageDown or Key.Space: Page(+1); break;
+            case Key.Up or Key.Left or Key.PageUp: Page(-1); break;
             default: base.OnKeyDown(e); return;
         }
         e.Handled = true;
     }
 
-    private void Page(int direction, bool orSong = false)
+    private void Page(int direction)
     {
         var atEnd = direction > 0
             ? _scroller.Offset.Y >= _scroller.Extent.Height - _scroller.Viewport.Height - 1
             : _scroller.Offset.Y <= 1;
-        if (orSong && atEnd && _place is not null)
-        {
+        if (atEnd && _place is not null)
             _place.Step(direction);
-            return;
-        }
-        var step = _scroller.Viewport.Height * 0.85;
-        var y = Math.Clamp(_scroller.Offset.Y + direction * step, 0, Math.Max(0, _scroller.Extent.Height - _scroller.Viewport.Height));
-        _scroller.Offset = new Vector(0, y);
+        else
+            _smart.Page(direction);
     }
 
     private void Render()
@@ -184,11 +347,13 @@ internal sealed class StageView : UserControl
         var palette = SongPalette.FromTheme(theme);
         Background = _scroller.Background = palette.Background;
         _bar.Background = _footer.Background = palette.CommentBackground;
+        _readingMarker.Background = palette.Chord;
+        _scrollHint.Foreground = palette.MutedText;
         var transpose = _songSettings.Transpose;
         _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
-        _columns = Bounds.Width >= TwoColumnMinWidth ? 2 : 1;
+        _columns = ColumnsFor(Bounds.Width);
 
-        var options = new RenderOptions
+        _renderer = new SongRenderer(new RenderOptions
         {
             FontSize = SongFontSize,
             Transpose = transpose,
@@ -196,7 +361,8 @@ internal sealed class StageView : UserControl
             Columns = _columns,
             Palette = palette,
             KeyIncludesCapo = _keyIncludesCapo,
-        };
-        _scroller.Content = new Border { Padding = new Thickness(16, 12), Child = new SongRenderer(options).Render(_song) };
+        });
+        _content.Child = _renderer.Render(_song);
+        _smart.InvalidateTimeline();
     }
 }

@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using ChordPro.Core;
 using ChordPro.Core.Scrolling;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>Turns a song's timing (duration, markers, or bars) into a timeline of scroll offsets for its rendered layout.</summary>
 public sealed class ScrollTimelineBuilder(Song song, IReadOnlyDictionary<(Section, int), Control> lines, Visual content,

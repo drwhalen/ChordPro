@@ -936,17 +936,8 @@ public partial class MainWindow : Window
     }
 
     // Page turns land on line boundaries and keep a chorus together where it fits on screen.
-    private double? PageTarget(int direction, double offset, double viewportHeight)
-    {
-        if (_renderer is null || _renderedColumns > 1)
-            return null; // with two columns there's no single top-to-bottom order of lines
-        var groups = PdfExporter.PageGroups(_renderer, SongHost);
-        var target = direction > 0
-            ? PageLayout.NextPageTop(groups, offset, viewportHeight) ?? double.MaxValue
-            : PageLayout.PreviousPageTop(groups, offset, viewportHeight);
-        // Leave a little room above the new top line rather than pressing it against the edge.
-        return target is > 0 and < double.MaxValue ? target - _fontSize * 0.5 : target;
-    }
+    private double? PageTarget(int direction, double offset, double viewportHeight) =>
+        _renderer?.PageTop(direction, offset, viewportHeight, SongHost);
 
     private void OnPageUpClick(object? sender, RoutedEventArgs e) => _scroller.Page(-1);
 

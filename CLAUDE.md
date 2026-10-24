@@ -55,11 +55,11 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     `Tuning/` (`PitchDetector` — YIN, `Note`)
 - `src/ChordPro.UI` — Avalonia controls shared by the Mac and iOS apps (namespace `ChordPro.UI`):
   `SongRenderer` builds the song as controls from `RenderOptions` (also exposes `Groups` for pagination
-  and `LineControls` for scrolling); `ChordDiagram`, `ChordPopup`, `WindowTheme` (recolors Fluent
-  controls). Core and UI are `IsTrimmable`, since the iOS build is trimmed: no reflection-based JSON.
+  and `LineControls` for scrolling, `PageGroups`/`TopOf`, and `PageTop` for page turns on line
+  boundaries); `SmartScroller` + `ScrollTimelineBuilder` (scroll modes; `ScrollMode`), `ChordDiagram`,
+  `ChordPopup`, `WindowTheme` (recolors Fluent controls). Core and UI are `IsTrimmable`, since the iOS build is trimmed: no reflection-based JSON.
   `RenderOptions` clashes with `Avalonia.Media.RenderOptions`, so the apps alias it in their csproj.
-- `src/ChordPro.Viewer` — the Mac app. `MainWindow` wires everything;
-  `SmartScroller` + `ScrollTimelineBuilder` (scroll modes); `PdfExporter` (Skia vector PDF);
+- `src/ChordPro.Viewer` — the Mac app. `MainWindow` wires everything; `PdfExporter` (Skia vector PDF);
   `ThemeEditorWindow`, `TunerWindow`, `TunerMeter`; `Microphone` (PortAudio), `AudioFollower`, `VoiceFollower` (Whisper.net,
   on-device) + `SpeechModel` (one-time model download); `Transcriber` (Whisper windows and whole
   recordings with word times), `VoiceTrainer` + `VoiceTrainingWindow` (Train…), `AudioFile` (WAV, or
@@ -69,15 +69,17 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
 - `src/ChordPro.Mobile` — the iPad/iPhone app (`net10.0-ios`, `Avalonia.iOS`): `App`, `AppDelegate`
   (+ `SceneDelegate`), `MainView` (switches between the list and a song; refreshes on launch and on
   returning to the foreground; plays setlists), `LibraryView` (Songs | Setlists, search, grouping),
-  `SetlistView` (a setlist's songs and sets with running times), `StageView` (text size, transpose,
-  theme, tap/pedal paging; per-song settings shared with the Mac; in a setlist, Previous / Next with the
+  `SetlistView` (a setlist's songs and sets with running times), `StageView` (▶, Scroll ▾ with
+  Manual/Timed/Musical, speed or tempo and tap tempo, Aa ▾ with text size, transpose and theme;
+  tap/pedal paging; per-song settings shared with the Mac; in a setlist, Previous / Next with the
   next song's key, and a pedal press at either end of a song moves to the next or previous song), `LibraryAccess` (Files folder picker,
   security-scoped bookmark, `LibraryMirror` refresh into Application Support, asks iCloud to download
   placeholders), `MobileSettings` (+ `AppFolders`). Songs are always read from the device's copy.
   The samples are embedded for the first launch and App Store review.
   Debug builds read `CHORDPRO_LIVE_LIBRARY` (a library folder on the Mac, instead of the picker) and
   `CHORDPRO_LIVE_OPEN` (opens a song by title), `CHORDPRO_LIVE_SETLIST` (opens a setlist by name) and
-  `CHORDPRO_LIVE_SETLIST_SONG` (plays its entry at that index), passed as `SIMCTL_CHILD_…` to `simctl launch`. It suppresses IL2037/IL2104,
+  `CHORDPRO_LIVE_SETLIST_SONG` (plays its entry at that index), `CHORDPRO_LIVE_SCROLL` (starts scrolling
+  in that mode), passed as `SIMCTL_CHILD_…` to `simctl launch`. It suppresses IL2037/IL2104,
   which come from Avalonia's own iOS and designer assemblies.
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
 - `samples/` — `amazing-grace.cho` (timed markers), `morning-road.cho` (musical bars, capo, `{define}`),
