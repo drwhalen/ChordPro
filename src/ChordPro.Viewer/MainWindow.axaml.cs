@@ -1349,6 +1349,7 @@ public partial class MainWindow : Window
             switch (e.Key)
             {
                 case Key.O: OnOpenClick(this, e); break;
+                case Key.N: OnNewSongClick(this, e); break;
                 case Key.P: OnExportPdfClick(this, e); break;
                 case Key.T: OnTunerClick(this, e); break;
                 case Key.OemPlus or Key.Add: SetFontSize(_fontSize + 2); break;
@@ -2025,6 +2026,98 @@ public partial class MainWindow : Window
     }
 
     // Before unsaved edits would be lost: Save, Don't Save, or Cancel (false: stay as you are).
+    // ---- New songs ---------------------------------------------------------------------------
+
+    // New song…: a ChordPro skeleton in the library folder, opened in the editor with the cursor in
+    // Verse 1 and the key companion showing the key's chords.
+    private async void OnNewSongClick(object? sender, RoutedEventArgs e)
+    {
+        if (_settings.LibraryFolder is not { } folder || !Directory.Exists(folder))
+        {
+            StatusText.Text = "Choose a library folder first: new songs go in it";
+            return;
+        }
+        if (!await ConfirmKeepOrDiscardEditsAsync())
+            return;
+        var details = await NewSongDialog.AskAsync(this, "New song", "Create", new NewSongDetails("", _settings.LastArtist ?? "", "G"));
+        if (details is null)
+            return;
+        var (text, caret) = NewSong.Template(details);
+        if (await WriteNewSongAsync(folder, details, text) is not { } path)
+            return;
+        OpenNewSongInEditor(path, caret);
+        StatusText.Text = $"New song: {Path.GetFileName(path)}";
+    }
+
+    // Save As…: the song being edited (with any unsaved changes) as a new song; a different key
+    // moves its chords there. The original stays as it was last saved.
+    private async void OnSaveAsNewSongClick(object? sender, RoutedEventArgs e)
+    {
+        if (!_editing || _path is null)
+            return;
+        var text = EditorBox.Text ?? "";
+        var song = ChordProParser.Parse(text);
+        var initial = new NewSongDetails(song.Title ?? Path.GetFileNameWithoutExtension(_path), song.Artist ?? "", song.Key ?? "G",
+            int.TryParse(song.Tempo, out var bpm) ? bpm : null, song.CapoFret);
+        var note = IsDirty
+            ? "Give the copy another title, artist or key. Your unsaved changes go into the copy; the original stays as last saved."
+            : "Give the copy another title, artist or key. In another key its chords move there, and its own fingerings are left out.";
+        var details = await NewSongDialog.AskAsync(this, "Save as new song", "Save Copy", initial, note);
+        if (details is null)
+            return;
+        var folder = Path.GetDirectoryName(_path)!;
+        if (await WriteNewSongAsync(folder, details, NewSong.Copy(text, details)) is not { } path)
+            return;
+        // The editor's changes went into the copy: leave the original as it was saved.
+        SetEditorText(_savedText, 0);
+        OpenNewSongInEditor(path, 0);
+        StatusText.Text = details.Key != initial.Key
+            ? $"Saved a copy in {details.Key}: {Path.GetFileName(path)}"
+            : $"Saved a copy: {Path.GetFileName(path)}";
+    }
+
+    // Writes a new song's file, unless one by that name exists (then offers to open it). Returns its path.
+    private async Task<string?> WriteNewSongAsync(string folder, NewSongDetails details, string text)
+    {
+        var path = Path.Combine(folder, NewSong.FileName(details.Title, details.Artist));
+        if (File.Exists(path))
+        {
+            var answer = await ChoiceDialog.AskAsync(this, $"“{Path.GetFileNameWithoutExtension(path)}” is already in the library.",
+                "Open it, or try again with another title.", "Open It", "Cancel");
+            if (answer == "Open It" && await ConfirmKeepOrDiscardEditsAsync())
+                OpenPath(path);
+            return null;
+        }
+        try
+        {
+            SongFile.Write(path, text, TextFileFormat.Default);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"Could not create {Path.GetFileName(path)}: {ex.Message}";
+            return null;
+        }
+        if (details.Artist.Length > 0)
+        {
+            _settings.LastArtist = details.Artist;
+            _settings.Save();
+        }
+        return path;
+    }
+
+    private void OpenNewSongInEditor(string path, int caret)
+    {
+        OpenPath(path);
+        if (_editing)
+            LoadEditor();
+        else
+            StartEditing();
+        EditorBox.CaretIndex = Math.Clamp(caret, 0, (EditorBox.Text ?? "").Length);
+        EditorBox.Focus();
+        // It's a library song now: list it, and show where.
+        _ = ScanLibraryAsync(quiet: true).ContinueWith(_ => Dispatcher.UIThread.Post(() => RevealInLibrary(path)));
+    }
+
     private async Task<bool> ConfirmKeepOrDiscardEditsAsync()
     {
         if (!IsDirty)

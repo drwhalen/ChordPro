@@ -48,6 +48,8 @@ public sealed class AppSettings
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string? LibraryFolder { get; set; }
+    /// <summary>The artist the last new song was by, offered for the next one.</summary>
+    public string? LastArtist { get; set; }
     /// <summary>None, Artist or Book.</summary>
     public string? LibraryGroupBy { get; set; }
     /// <summary>Older on/off setting for grouping by artist, used when <see cref="LibraryGroupBy"/> isn't set.</summary>

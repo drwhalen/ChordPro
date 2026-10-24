@@ -29,6 +29,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     (incl. LivePrompter `.txt` setlists), `SongLibrary` (scan, group, filter, key-convention guess),
     `LibraryCheck`, `SetlistPlanner` (scores song-to-song steps and plans sets that flow), `SetLength`
     (running time from `{duration}`), `EditorInsert` (the editor's Insert menu: sections, directive lines, the key at the cursor),
+    `NewSong` (New song… and Save As…: file name, starting template, a copy moved to another key),
     `Chords/KeyChords` (the chords of a key, for the key companion), `Chords/ChordProgressions` (what
     usually comes next, and Nashville numbers), `Chords/SongFingerings` (writes a
     chosen fingering as `{define}` or `{define-<selector>}`, see `Instrument.Selector`); a second `{key}`

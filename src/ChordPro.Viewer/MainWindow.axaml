@@ -171,6 +171,8 @@
                             <WrapPanel Classes="buttons">
                                 <Button Content="Choose folder…" Click="OnChooseFolderClick" />
                                 <Button Content="Refresh" Click="OnRefreshLibraryClick" />
+                                <Button Content="New song…" Click="OnNewSongClick"
+                                        ToolTip.Tip="Start a new song in the library, ready to write (⌘/Ctrl+N)" />
                                 <Button Content="Check…" Click="OnCheckLibraryClick"
                                         ToolTip.Tip="Look for problems in the songs and setlists: empty headings, wrong keys, misspelled chords, missing songs" />
                             </WrapPanel>
@@ -262,6 +264,8 @@
                             </Button>
                             <Button x:Name="SaveButton" Content="Save" Classes="accent" Click="OnSaveEditsClick" ToolTip.Tip="Save the file (⌘/Ctrl+S)" />
                             <Button x:Name="RevertButton" Content="Revert" Click="OnRevertEditsClick" ToolTip.Tip="Throw away changes since the last save" />
+                            <Button Content="Save As…" Click="OnSaveAsNewSongClick"
+                                    ToolTip.Tip="Save a copy as a new song: another title, artist or key (a new key moves the chords)" />
                             <Button Content="Done" Click="OnEditToggleClick" ToolTip.Tip="Close the editor" />
                         </StackPanel>
                     </Grid>
