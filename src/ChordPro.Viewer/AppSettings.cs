@@ -5,28 +5,6 @@ using ChordPro.Core.Themes;
 
 namespace ChordPro.Viewer;
 
-/// <summary>Per-song view settings that are remembered between sessions.</summary>
-public sealed class SongSettings
-{
-    public int Transpose { get; set; }
-    public int? Capo { get; set; }
-    public double? FontSize { get; set; }
-    /// <summary>Speed multiplier for timed scrolling.</summary>
-    public double? ScrollSpeed { get; set; }
-    /// <summary>Manual, Timed, Musical or FollowAudio; null means Timed.</summary>
-    public string? ScrollMode { get; set; }
-    /// <summary>Tempo override for musical scrolling, in BPM.</summary>
-    public double? Tempo { get; set; }
-    /// <summary>How many times the song was played (scrolled or shown in stage mode), for favoring familiar songs in a set.</summary>
-    public int Plays { get; set; }
-    /// <summary>The singer marked this song, in its transposed key, as sitting well for their voice.</summary>
-    public bool FitsVoice { get; set; }
-    /// <summary>The tuning chosen for this song (an instrument name, in the player's family); null to follow the song's <c>{x_tuning}</c>.</summary>
-    public string? Tuning { get; set; }
-    /// <summary>Semitones this song is tuned down or up (−1 for a half step down); null to follow the song's <c>{x_tuning}</c>.</summary>
-    public int? TuningOffset { get; set; }
-}
-
 /// <summary>A library-check problem marked "Looks fine", for as long as its file stays as it was then.</summary>
 public sealed class AcceptedIssue
 {
@@ -76,17 +54,63 @@ public sealed class AppSettings
     public bool SidebarVisible { get; set; } = true;
     public string Theme { get; set; } = SongTheme.SystemThemeName;
     public List<SongTheme> CustomThemes { get; set; } = [];
-    public Dictionary<string, SongSettings> Songs { get; set; } = [];
     public List<AcceptedIssue> AcceptedIssues { get; set; } = [];
     /// <summary>Follow voice settings found by training; null for the standard ones.</summary>
     public VoiceTuning? VoiceTuning { get; set; }
 
+    /// <summary>
+    /// Settings of songs outside the library folder, by full path. Songs in the library keep theirs in the
+    /// library's own file (<see cref="LibrarySongSettings"/>), shared with other devices.
+    /// </summary>
+    public Dictionary<string, SongSettings> Songs { get; set; } = [];
+
+    private LibrarySongSettings? _library;
+
+    // The library's shared song settings, opened when first needed; the first time, the settings this
+    // app kept for its songs by full path move there.
+    private LibrarySongSettings? Library
+    {
+        get
+        {
+            if (LibraryFolder is not { } folder)
+                return null;
+            if (_library?.Folder != Path.GetFullPath(folder))
+            {
+                if (!Directory.Exists(folder))
+                    return null;
+                _library = LibrarySongSettings.Open(folder);
+                var adopted = _library.Adopt(Songs);
+                if (adopted.Count > 0 && _library.Save())
+                {
+                    foreach (var path in adopted)
+                        Songs.Remove(path);
+                    SaveFile();
+                }
+            }
+            return _library;
+        }
+    }
+
+    /// <summary>A song's settings, added when it has none.</summary>
     public SongSettings ForSong(string path)
     {
+        if (Library is { } library && library.KeyFor(path) is { } key)
+            return library.GetOrAdd(key);
         if (!Songs.TryGetValue(path, out var settings))
             Songs[path] = settings = new SongSettings();
         return settings;
     }
+
+    /// <summary>A song's settings, or null when it has none.</summary>
+    public SongSettings? SettingsOf(string path) =>
+        Library is { } library && library.KeyFor(path) is { } key ? library.Get(key) : Songs.GetValueOrDefault(path);
+
+    /// <summary>Every song with settings, by full path.</summary>
+    public IEnumerable<KeyValuePair<string, SongSettings>> AllSongSettings() =>
+        (Library?.Songs.Select(s => KeyValuePair.Create(_library!.PathFor(s.Key), s.Value)) ?? []).Concat(Songs);
+
+    /// <summary>Takes song settings another device saved to the library since they were last read.</summary>
+    public void RefreshSongSettings() => Library?.Refresh();
 
     public void AddRecentFile(string path)
     {
@@ -111,6 +135,12 @@ public sealed class AppSettings
     }
 
     public void Save()
+    {
+        _library?.Save();
+        SaveFile();
+    }
+
+    private void SaveFile()
     {
         try
         {

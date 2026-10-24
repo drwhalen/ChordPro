@@ -189,6 +189,7 @@ public partial class MainWindow : Window
         _loadedText = text;
         _path = Path.GetFullPath(path);
 
+        _settings.RefreshSongSettings(); // another device may have changed them
         var songSettings = _settings.ForSong(_path);
         _transpose = songSettings.Transpose;
         _capo = songSettings.Capo;
@@ -363,7 +364,7 @@ public partial class MainWindow : Window
     {
         get
         {
-            var saved = _path is null ? null : _settings.Songs.GetValueOrDefault(_path);
+            var saved = _path is null ? null : _settings.SettingsOf(_path);
             var file = SongTuning.Parse(_song?.Tuning);
             var instrument = saved?.Tuning is { } name ? Instrument.Find(name) : file?.Instrument;
             var offset = saved?.TuningOffset ?? file?.Offset ?? 0;
@@ -378,7 +379,7 @@ public partial class MainWindow : Window
     private int TuningOffset => CurrentSongTuning?.Offset ?? 0;
 
     // A library song's tuning offset: chosen for it in the View menu, or given by the file.
-    private int TuningOffsetOf(SongInfo song) => _settings.Songs.GetValueOrDefault(song.Path)?.TuningOffset ?? song.TuningOffset;
+    private int TuningOffsetOf(SongInfo song) => _settings.SettingsOf(song.Path)?.TuningOffset ?? song.TuningOffset;
 
     // The song's tuning for its header, when it isn't the player's usual one.
     private string? TuningNote()
@@ -408,7 +409,7 @@ public partial class MainWindow : Window
         var file = SongTuning.Parse(_song?.Tuning);
         var usual = file?.Apply(player) ?? player;
         _tuningChoices = [usual, .. Instrument.All.Where(i => i.Family == player.Family && i != usual)];
-        var saved = _path is null ? null : _settings.Songs.GetValueOrDefault(_path);
+        var saved = _path is null ? null : _settings.SettingsOf(_path);
 
         _updatingTuning = true;
         SongTuningBox.ItemsSource = _tuningChoices
@@ -627,7 +628,7 @@ public partial class MainWindow : Window
         ShownKeyText.IsVisible = shownKey is not null;
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
-        FitsVoiceToggle.IsChecked = _path is not null && _settings.Songs.GetValueOrDefault(_path)?.FitsVoice == true;
+        FitsVoiceToggle.IsChecked = _path is not null && _settings.SettingsOf(_path)?.FitsVoice == true;
         RefreshSongTuningChoices();
         UpdateScrollControls();
     }
@@ -676,7 +677,7 @@ public partial class MainWindow : Window
     private VoiceRange LearnedVoice()
     {
         var byPath = _library.ToDictionary(s => s.Path);
-        var keys = _settings.Songs
+        var keys = _settings.AllSongSettings()
             .Where(s => s.Value.FitsVoice || s.Value.Transpose != 0)
             .Select(s => byPath.GetValueOrDefault(s.Key))
             .OfType<SongInfo>()
@@ -1502,7 +1503,7 @@ public partial class MainWindow : Window
             }
             var info = SongLibrary.ReadInfo(path) ?? new SongInfo(path, song.Title ?? Path.GetFileNameWithoutExtension(path), song.Artist);
             var played = PlannedFor(info);
-            var settings = _settings.Songs.GetValueOrDefault(path);
+            var settings = _settings.SettingsOf(path);
             var options = CurrentRenderOptions() with { Transpose = settings?.Transpose ?? 0, Capo = settings?.Capo };
             entries.Add(new BookletEntry(info.Title, info.Artist, played.Key, played.Capo, played.Tempo, song, options) { Length = info.Length });
         }
@@ -1609,8 +1610,15 @@ public partial class MainWindow : Window
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
             };
-            FileSystemEventHandler changed = (_, _) => Dispatcher.UIThread.Post(() =>
+            FileSystemEventHandler changed = (_, e) => Dispatcher.UIThread.Post(() =>
             {
+                // The library's song settings file (and its temporary copy) isn't a song: take another
+                // device's changes without rescanning; the app's own saves change nothing here.
+                if (Path.GetFileName(e.FullPath).StartsWith(LibrarySongSettings.FileName, StringComparison.Ordinal))
+                {
+                    _settings.RefreshSongSettings();
+                    return;
+                }
                 _libraryRescanTimer.Stop();
                 _libraryRescanTimer.Start();
             });
@@ -1721,7 +1729,7 @@ public partial class MainWindow : Window
     private bool FitsInstrument(SongInfo song, bool allowTransposing)
     {
         var instrument = SongTuning.Parse(song.Tuning)?.Apply(PlayerInstrument) ?? PlayerInstrument;
-        var saved = _settings.Songs.GetValueOrDefault(song.Path);
+        var saved = _settings.SettingsOf(song.Path);
         // As the song is drawn: moved by its transposition, and on a dulcimer heard without the guitar capo.
         var capo = saved?.Capo ?? (instrument.IsDiatonic ? 0 : song.Capo);
         var shift = (saved?.Transpose ?? 0) + song.Capo - capo;
@@ -2475,7 +2483,7 @@ public partial class MainWindow : Window
     // How the player plays a song: the key heard after their transpose, their tempo and capo, and plays.
     private PlannedSong PlannedFor(SongInfo song)
     {
-        var settings = _settings.Songs.GetValueOrDefault(song.Path);
+        var settings = _settings.SettingsOf(song.Path);
         var capo = settings?.Capo ?? song.Capo;
         var heard = ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo, TuningOffsetOf(song)), settings?.Transpose ?? 0);
         return new PlannedSong(song, heard, settings?.Tempo ?? song.Tempo, capo, settings?.Plays ?? 0);

@@ -30,6 +30,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     `LibraryCheck`, `SetlistPlanner` (scores song-to-song steps and plans sets that flow), `SetLength`
     (running time from `{duration}`), `EditorInsert` (the editor's Insert menu: sections, directive lines, the key at the cursor),
     `NewSong` (New song… and Save As…: file name, starting template, a copy moved to another key),
+    `SongSettings` + `LibrarySongSettings` (per-song state shared through the library folder),
     `Chords/KeyChords` (the chords of a key, for the key companion), `Chords/ChordProgressions` (what
     usually comes next, and Nashville numbers), `Chords/SongFingerings` (writes a
     chosen fingering as `{define}` or `{define-<selector>}`, see `Instrument.Selector`); a second `{key}`
@@ -69,8 +70,12 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   expressions, `GeneratedRegex`, XML doc comments on public members, comments that explain *why*.
 - Custom ChordPro directives use the `x_` prefix (`{x_bars}`, `{x_time}`) so other ChordPro apps ignore
   them; section attributes use `key="value"` (`bars="16"`). Unknown directives are ignored, not errors.
-- Per-song state (transpose, capo, font size, scroll mode/speed/tempo) lives in `AppSettings.Songs`
-  keyed by full path; global preferences are top-level `AppSettings` properties.
+- Per-song state (transpose, capo, font size, scroll mode/speed/tempo, plays, My key, tuning) for songs in
+  the library lives in the library's own `.chordpro-viewer.json` (`LibrarySongSettings`), keyed by
+  library-relative path with `/`, so the Mac and iOS apps share it through iCloud; saves merge song by
+  song, newest `Modified` winning. Songs outside the library stay in `AppSettings.Songs` by full path, and
+  entries there move into the library file when it's opened. Always go through `AppSettings.ForSong` /
+  `SettingsOf` / `AllSongSettings`. Global preferences are top-level `AppSettings` properties.
 - Commits: imperative summary line, then a bulleted body; the user asks before each commit and push.
 
 ## Gotchas (learned the hard way)
@@ -78,7 +83,8 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
 - **Verifying UI changes:** build a throwaway harness in the scratchpad that references the Viewer and uses
   `Avalonia.Headless` + `Avalonia.Skia` (`UseHeadlessDrawing = false`), then `CaptureRenderedFrame()`
   to PNG. Point `CHORDPRO_VIEWER_SETTINGS` at a scratch file so the user's real settings
-  (`~/Library/Application Support/ChordPro Viewer/settings.json` via LocalApplicationData) aren't touched.
+  (`~/Library/Application Support/ChordPro Viewer/settings.json` via LocalApplicationData) aren't touched,
+  and give that file a scratch `LibraryFolder`: song settings are written into the library folder itself.
   - Under the headless platform, `DispatcherTimer` only ticks inside `Dispatcher.UIThread.MainLoop(token)`;
     `RunJobs()` alone never fires timers. Don't `await` in the harness's top-level code either (the
     continuation lands off the UI thread and hangs).
