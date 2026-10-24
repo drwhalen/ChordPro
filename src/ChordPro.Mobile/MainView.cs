@@ -15,13 +15,14 @@ internal sealed class MainView : UserControl
     private readonly LibraryAccess _access;
     private readonly LibraryView _library;
     private LibrarySongSettings? _songSettings;
+    private Dictionary<string, SongInfo> _songsByPath = [];
     private bool _keyIncludesCapo;
     private int _notDownloaded;
 
     public MainView()
     {
         _access = new LibraryAccess(_settings);
-        _library = new LibraryView(_settings, ChooseLibraryAsync, Open);
+        _library = new LibraryView(_settings, ChooseLibraryAsync, info => Open(info.Path, "Songs", Back), OpenSetlist);
         Content = _library;
         ApplyTheme();
         // Coming back to the app (from Files, or after a while away): pick up changes made on the Mac.
@@ -74,16 +75,46 @@ internal sealed class MainView : UserControl
     private async Task ReloadAsync()
     {
         var folder = _access.SongsFolder;
-        var songs = await Task.Run(() => Directory.Exists(folder) ? SongLibrary.Scan(folder) : []);
+        var (songs, setlists) = await Task.Run(() =>
+        {
+            if (!Directory.Exists(folder))
+                return ([], []);
+            var songs = SongLibrary.Scan(folder);
+            var paths = songs.Select(s => s.Path).ToList();
+            var byPath = songs.ToDictionary(s => s.Path);
+            List<SetlistSummary> setlists = [];
+            foreach (var path in SongLibrary.FindSetlists(folder))
+            {
+                try
+                {
+                    var setlist = Setlist.Load(path, paths);
+                    var length = SetLength.Of(setlist.Songs.Where(e => !Setlist.IsDivider(e)).Select(e => byPath.GetValueOrDefault(e)?.Length));
+                    setlists.Add(new SetlistSummary(path, Path.GetFileNameWithoutExtension(path), setlist, length));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // A setlist mid-sync is listed next time.
+                }
+            }
+            return (songs, setlists);
+        });
         _keyIncludesCapo = SongLibrary.GuessKeyIncludesCapo(songs) ?? false;
         _songSettings = LibrarySongSettings.Open(folder);
-        _library.SetSongs(songs);
+        _songsByPath = songs.ToDictionary(s => s.Path);
+        _library.SetSongs(songs, setlists);
         _library.SetStatus(Status(songs.Count));
 #if DEBUG
         // For simulator checks: open a song by title (SIMCTL_CHILD_CHORDPRO_LIVE_OPEN=…).
         if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_OPEN") is { } title && Content == _library &&
             songs.FirstOrDefault(s => s.Title.Contains(title, StringComparison.OrdinalIgnoreCase)) is { } song)
-            Open(song);
+            Open(song.Path, "Songs", Back);
+        if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SETLIST") is { } name && Content == _library &&
+            setlists.FirstOrDefault(s => s.Name.Contains(name, StringComparison.OrdinalIgnoreCase)) is { } found)
+        {
+            OpenSetlist(found);
+            if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SETLIST_SONG") is { } index)
+                Play(found, int.Parse(index, System.Globalization.CultureInfo.InvariantCulture));
+        }
 #endif
     }
 
@@ -105,27 +136,72 @@ internal sealed class MainView : UserControl
             : utc.ToLocalTime().ToString("MMM d");
     }
 
-    private void Open(SongInfo info)
+    // Shows a song on stage; false when its file can't be read.
+    private bool Open(string path, string backLabel, Action back, SetlistPlace? place = null)
     {
         Song song;
         try
         {
-            song = ChordProParser.ParseFile(info.Path);
+            song = ChordProParser.ParseFile(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _library.SetStatus($"Could not open {info.Title}");
-            return;
+            _library.SetStatus($"Could not open {Path.GetFileNameWithoutExtension(path)}");
+            return false;
         }
         var store = _songSettings ??= LibrarySongSettings.Open(_access.SongsFolder);
         store.Refresh();
-        var key = store.KeyFor(info.Path);
+        var key = store.KeyFor(path);
         var songSettings = key is null ? new SongSettings() : store.GetOrAdd(key);
-        Content = new StageView(song, songSettings, _settings, _keyIncludesCapo, Back, () =>
+        void Saved()
         {
             store.Save();
             _access.ShareSettings();
+        }
+        if (place is not null)
+        {
+            // Played in a set: counted, so Suggest a set on the Mac can favor familiar songs.
+            songSettings.Plays++;
+            Saved();
+        }
+        Content = new StageView(song, songSettings, _settings, _keyIncludesCapo, backLabel, back, Saved, place);
+        return true;
+    }
+
+    private void OpenSetlist(SetlistSummary setlist)
+    {
+        var palette = SongPalette.FromTheme(CurrentTheme(_settings));
+        Content = new SetlistView(setlist, _songsByPath, palette, Back, index => Play(setlist, index));
+    }
+
+    // Plays a setlist from one of its songs: the stage shows what's next, and steps through the set.
+    private void Play(SetlistSummary setlist, int index)
+    {
+        var songs = setlist.Setlist;
+        // Songs that aren't in the library are passed over.
+        (int Index, string? Divider)? StepFrom(int from, int direction) => songs.Step(from, direction, _songsByPath.ContainsKey);
+
+        string? next = null;
+        if (StepFrom(index, +1) is var (nextIndex, divider) && _songsByPath.GetValueOrDefault(songs.Songs[nextIndex]) is { } info)
+        {
+            next = (divider is null ? "" : $"{divider} · ") + info.Title;
+            if (HeardKey(info) is { } key)
+                next += $" ({key})";
+        }
+        var place = new SetlistPlace(next, StepFrom(index, -1) is not null, direction =>
+        {
+            if (StepFrom(index, direction) is var (to, _))
+                Play(setlist, to);
         });
+        Open(songs.Songs[index], "Setlist", () => OpenSetlist(setlist), place);
+    }
+
+    // The key a song will be heard in, as its header shows it: after its capo, tuning and saved transpose.
+    private string? HeardKey(SongInfo song)
+    {
+        var saved = _songSettings?.KeyFor(song.Path) is { } key ? _songSettings.Get(key) : null;
+        var sounding = ChordTransposer.SoundingKey(song.Key, song.Capo, _keyIncludesCapo, saved?.TuningOffset ?? song.TuningOffset);
+        return ChordTransposer.Shift(sounding, saved?.Transpose ?? 0);
     }
 
     private void Back()

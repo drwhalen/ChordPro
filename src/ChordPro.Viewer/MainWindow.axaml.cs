@@ -2330,17 +2330,7 @@ public partial class MainWindow : Window
     private (string Path, string? Divider)? NextInSetlist()
     {
         var current = _path is null ? -1 : _setlist.Songs.IndexOf(_path);
-        if (current < 0)
-            return null;
-        string? divider = null;
-        for (var i = current + 1; i < _setlist.Songs.Count; i++)
-        {
-            if (Setlist.IsDivider(_setlist.Songs[i]))
-                divider = Setlist.DividerName(_setlist.Songs[i]);
-            else
-                return (_setlist.Songs[i], divider);
-        }
-        return null;
+        return current >= 0 && _setlist.Step(current, +1) is var (next, divider) ? (_setlist.Songs[next], divider) : null;
     }
 
     // In stage mode, show what's coming next so the key and the next chart are no surprise; tapping
@@ -2542,10 +2532,7 @@ public partial class MainWindow : Window
         if (_setlist.Songs.Count == 0)
             return;
         var current = _path is null ? -1 : _setlist.Songs.IndexOf(_path);
-        var next = current < 0 ? (direction > 0 ? 0 : _setlist.Songs.Count - 1) : current + direction;
-        while (next >= 0 && next < _setlist.Songs.Count && Setlist.IsDivider(_setlist.Songs[next]))
-            next += direction;
-        if (next >= 0 && next < _setlist.Songs.Count)
+        if (_setlist.Step(current, direction) is var (next, _))
             LoadFile(_setlist.Songs[next]);
     }
 

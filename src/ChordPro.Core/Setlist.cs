@@ -23,6 +23,25 @@ public sealed partial class Setlist
 
     public List<string> Songs { get; } = [];
 
+    /// <summary>
+    /// The song a step away from the entry at <paramref name="index"/>, skipping set dividers, with the
+    /// name of the last divider passed on the way ("Set 2"). From −1 (no song open yet), forward starts at
+    /// the first song and back at the last. Null past either end.
+    /// </summary>
+    /// <param name="playable">Songs to stop at (e.g. those in the library); others are passed over. Null for all.</param>
+    public (int Index, string? Divider)? Step(int index, int direction, Func<string, bool>? playable = null)
+    {
+        string? divider = null;
+        for (var i = index < 0 ? (direction > 0 ? 0 : Songs.Count - 1) : index + direction; i >= 0 && i < Songs.Count; i += direction)
+        {
+            if (IsDivider(Songs[i]))
+                divider = DividerName(Songs[i]);
+            else if (playable?.Invoke(Songs[i]) != false)
+                return (i, divider);
+        }
+        return null;
+    }
+
     /// <summary>True for a LivePrompter setlist: a <c>.txt</c> file that isn't itself a ChordPro song.</summary>
     public static bool IsLivePrompterSetlist(string path) =>
         IsLivePrompterFormat(path) && File.Exists(path) && !SongLibrary.LooksLikeChordPro(path);

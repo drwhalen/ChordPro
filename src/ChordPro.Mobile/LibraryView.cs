@@ -11,7 +11,10 @@ namespace ChordPro.Mobile;
 /// <summary>A heading in the song list when it's grouped ("Pink Floyd · 6").</summary>
 internal sealed record GroupHeading(string Name, int Count);
 
-/// <summary>The song list: search, grouping, and the library folder with how fresh its copy is.</summary>
+/// <summary>A setlist in the library, with how long it runs.</summary>
+internal sealed record SetlistSummary(string Path, string Name, Setlist Setlist, SetLength Length);
+
+/// <summary>The song list and the setlists: search, grouping, and the library folder with how fresh its copy is.</summary>
 internal sealed class LibraryView : UserControl
 {
     private static readonly LibraryGrouping[] Groupings = [LibraryGrouping.None, LibraryGrouping.Artist, LibraryGrouping.Book, LibraryGrouping.Recent, LibraryGrouping.Decade];
@@ -23,13 +26,19 @@ internal sealed class LibraryView : UserControl
     private readonly ComboBox _grouping = new() { ItemsSource = GroupingNames, VerticalAlignment = VerticalAlignment.Center };
     private readonly ListBox _list = new() { Background = Brushes.Transparent };
     private readonly Border _header = new() { Padding = new Thickness(12, 8) };
+    private readonly Button _songsTab = Tab("Songs");
+    private readonly Button _setlistsTab = Tab("Setlists");
+    private bool _showingSetlists;
     private List<SongInfo> _songs = [];
+    private List<SetlistSummary> _setlists = [];
     private SongPalette _palette = SongPalette.Print;
 
-    public LibraryView(MobileSettings settings, Func<Task> chooseLibrary, Action<SongInfo> open)
+    public LibraryView(MobileSettings settings, Func<Task> chooseLibrary, Action<SongInfo> open, Action<SetlistSummary> openSetlist)
     {
         _settings = settings;
-        var title = new TextBlock { Text = "Songs", FontSize = 28, FontWeight = FontWeight.Bold };
+        _songsTab.Click += (_, _) => ShowTab(setlists: false);
+        _setlistsTab.Click += (_, _) => ShowTab(setlists: true);
+        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { _songsTab, _setlistsTab } };
         var choose = new Button { Content = "Library…", VerticalAlignment = VerticalAlignment.Center };
         choose.Click += async (_, _) => await chooseLibrary();
         var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 8 };
@@ -45,9 +54,9 @@ internal sealed class LibraryView : UserControl
         {
             _settings.Grouping = Groupings[Math.Max(0, _grouping.SelectedIndex)].ToString();
             _settings.Save();
-            ShowSongs();
+            ShowItems();
         };
-        _search.TextChanged += (_, _) => ShowSongs();
+        _search.TextChanged += (_, _) => ShowItems();
 
         _list.ItemTemplate = new FuncDataTemplate<object>((item, _) => item switch
         {
@@ -60,13 +69,17 @@ internal sealed class LibraryView : UserControl
                 Margin = new Thickness(0, 10, 0, 2),
             },
             SongInfo song => SongRow(song),
+            SetlistSummary setlist => Row(setlist.Name, setlist.Length.ToString()),
             _ => new Control(),
         });
         // A tap, not a selection: scrolling the list mustn't open songs.
         _list.Tapped += (_, e) =>
         {
-            if ((e.Source as StyledElement)?.DataContext is SongInfo song)
-                open(song);
+            switch ((e.Source as StyledElement)?.DataContext)
+            {
+                case SongInfo song: open(song); break;
+                case SetlistSummary setlist: openSetlist(setlist); break;
+            }
         };
 
         var root = new DockPanel();
@@ -78,11 +91,12 @@ internal sealed class LibraryView : UserControl
         Content = root;
     }
 
-    /// <summary>The songs to list (a fresh scan of the copy).</summary>
-    public void SetSongs(List<SongInfo> songs)
+    /// <summary>The songs and setlists to list (a fresh scan of the copy).</summary>
+    public void SetSongs(List<SongInfo> songs, List<SetlistSummary> setlists)
     {
         _songs = songs;
-        ShowSongs();
+        _setlists = setlists;
+        ShowItems();
     }
 
     /// <summary>The line under "Songs": the library and how up to date the copy is.</summary>
@@ -94,27 +108,57 @@ internal sealed class LibraryView : UserControl
         Background = palette.Background;
         _header.Background = palette.CommentBackground;
         _status.Foreground = palette.MutedText;
-        ShowSongs();
+        ShowItems();
     }
 
-    private Control SongRow(SongInfo song)
+    // "Songs" and "Setlists" at the top, as large as a title.
+    private static Button Tab(string text) => new()
     {
-        var details = string.Join(" · ", new[] { song.Artist, song.Key is null ? null : $"Key {song.Key}", song.Capo > 0 ? $"Capo {song.Capo}" : null }
-            .Where(s => !string.IsNullOrEmpty(s)));
+        Content = text,
+        FontSize = 24,
+        FontWeight = FontWeight.Bold,
+        Background = Brushes.Transparent,
+        BorderThickness = new Thickness(0),
+        Padding = new Thickness(4, 0),
+    };
+
+    private void ShowTab(bool setlists)
+    {
+        _showingSetlists = setlists;
+        _grouping.IsVisible = !setlists;
+        _search.Watermark = setlists ? "Search setlists" : "Search songs and artists";
+        ShowItems();
+    }
+
+    private Control SongRow(SongInfo song) =>
+        Row(song.Title, string.Join(" · ", new[] { song.Artist, song.Key is null ? null : $"Key {song.Key}", song.Capo > 0 ? $"Capo {song.Capo}" : null }
+            .Where(s => !string.IsNullOrEmpty(s))));
+
+    private Control Row(string title, string details)
+    {
         return new StackPanel
         {
             Margin = new Thickness(0, 4),
             Background = Brushes.Transparent, // the whole row takes the tap
             Children =
             {
-                new TextBlock { Text = song.Title, FontSize = 18, Foreground = _palette.Text, TextTrimming = TextTrimming.CharacterEllipsis },
+                new TextBlock { Text = title, FontSize = 18, Foreground = _palette.Text, TextTrimming = TextTrimming.CharacterEllipsis },
                 new TextBlock { Text = details, FontSize = 14, Foreground = _palette.MutedText, TextTrimming = TextTrimming.CharacterEllipsis },
             },
         };
     }
 
-    private void ShowSongs()
+    private void ShowItems()
     {
+        // The tab not shown is drawn dimmed.
+        _songsTab.Foreground = _showingSetlists ? _palette.MutedText : _palette.Text;
+        _setlistsTab.Foreground = _showingSetlists ? _palette.Text : _palette.MutedText;
+        if (_showingSetlists)
+        {
+            _list.ItemsSource = _setlists.Where(s => string.IsNullOrWhiteSpace(_search.Text) ||
+                s.Name.Contains(_search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList();
+            return;
+        }
         var songs = SongLibrary.Filter(_songs, _search.Text);
         var grouping = Groupings[Math.Max(0, _grouping.SelectedIndex)];
         List<object> items = [];
