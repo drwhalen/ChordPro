@@ -191,4 +191,18 @@ public class ChordShapeTests
     [Fact]
     public void SuggestsNoCapoOnADiatonicNeck() =>
         Assert.Equal([0], CapoSuggester.Suggest([("G", 2), ("D", 2)], Instrument.DulcimerDAdd).Select(s => s.Capo));
+
+    [Fact]
+    public void SuggestsCapoPositionsForASongAsItIsShown()
+    {
+        // Written in G, transposed up to A: a capo on 2 keeps the G shapes.
+        var song = ChordProParser.Parse("{title: T}\n{key: G}\n[G]One [C]two [D]three [G]four [Em]five [C]six [D]seven");
+        var choices = CapoSuggester.ForSong(song, transpose: 2, keyIncludesCapo: false, tuningOffset: 0, simplify: false, Instrument.Guitar);
+        Assert.Equal(2, choices[0].Capo);
+        Assert.Equal("Capo 2 · G shapes", choices[0].Title);
+        Assert.Equal("G  C  D  Em  ·  no barre chords", choices[0].Detail);
+        Assert.Contains(choices, c => c.Title == "No capo · A shapes");
+
+        Assert.Empty(CapoSuggester.ForSong(ChordProParser.Parse("{title: T}\nNo chords"), 0, false, 0, false, Instrument.Guitar));
+    }
 }

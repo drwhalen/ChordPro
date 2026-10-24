@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace ChordPro.Viewer;
+namespace ChordPro.UI;
 
 /// <summary>A needle on a −50…+50 cent scale, with an in-tune zone in the middle.</summary>
 public sealed class TunerMeter : Control

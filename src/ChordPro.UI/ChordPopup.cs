@@ -30,7 +30,7 @@ public sealed class ChordPopup : UserControl
     /// <param name="shapes">Fingerings to show, best first; <c>Source</c> labels where one came from (e.g. "From the song").</param>
     /// <param name="use">Saves the fingering shown as the song's own; null when it can't be (see <paramref name="cantUse"/>).</param>
     /// <param name="forget">Drops the song's own fingering, going back to the usual one; null when it has none.</param>
-    /// <param name="cantUse">Why a fingering can't be saved, shown on the disabled button.</param>
+    /// <param name="cantUse">Why a fingering can't be saved, shown on the disabled button; with neither this nor <paramref name="use"/>, there's no button.</param>
     public ChordPopup(string name, IReadOnlyList<(ChordShape Shape, string? Source)> shapes, double fontSize, SongPalette palette,
         Instrument? instrument = null, Action<ChordShape>? use = null, Action? forget = null, string? cantUse = null)
     {
@@ -41,6 +41,8 @@ public sealed class ChordPopup : UserControl
         _palette = palette;
 
         _useShape = use;
+        // Where songs can't be changed at all (the iPad), there's nothing to offer.
+        _use.IsVisible = use is not null || cantUse is not null;
         _use.Click += (_, _) => _useShape?.Invoke(_shapes[_index].Shape);
         ToolTip.SetTip(_use, cantUse ?? "Save it in the song, so it's the one shown next time (and in other ChordPro apps)");
         _forget.IsVisible = forget is not null;

@@ -32,6 +32,15 @@ internal sealed class MobileSettings
     public string Theme { get; set; } = Core.Themes.SongTheme.Night.Name;
     /// <summary>A <see cref="Core.LibraryGrouping"/> name.</summary>
     public string? Grouping { get; set; }
+    /// <summary>The player's instrument (an <see cref="Core.Chords.Instrument"/> name), for diagrams, fingerings and the tuner.</summary>
+    public string Instrument { get; set; } = Core.Chords.Instrument.Guitar.Name;
+    public bool ShowDiagrams { get; set; }
+    /// <summary>Easy chords (<see cref="Core.Chords.ChordSimplifier"/>).</summary>
+    public bool SimplifyChords { get; set; }
+    /// <summary>Nashville numbers under the chords.</summary>
+    public bool ChordNumbers { get; set; }
+    /// <summary>The tuner's A4, in Hz.</summary>
+    public double TunerReference { get; set; } = Core.Tuning.Note.StandardReference;
 
     public static MobileSettings Load()
     {

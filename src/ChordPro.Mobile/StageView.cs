@@ -5,7 +5,9 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using ChordPro.Core;
+using ChordPro.Core.Chords;
 using ChordPro.Core.Scrolling;
 using ChordPro.Core.Themes;
 using ChordPro.UI;
@@ -19,7 +21,8 @@ internal sealed record SetlistPlace(string? Next, bool HasPrevious, Action<int> 
 
 /// <summary>
 /// A song on stage: paged by taps or a pedal, or scrolled (timed to its length, or musically by its tempo
-/// and bars), with text size, transpose and theme. Its settings are shared with the Mac through the library.
+/// and bars), with text size, transpose and theme; chord diagrams, easy chords, numbers, the song's tuning,
+/// capo suggestions and a tuner. Its settings are shared with the Mac through the library.
 /// </summary>
 internal sealed class StageView : UserControl
 {
@@ -51,6 +54,19 @@ internal sealed class StageView : UserControl
     private readonly TextBlock _scrollHint = new() { FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxWidth = 280 };
     private readonly Button _tapTempo = new() { Content = "Tap tempo" };
     private readonly ToggleButton[] _modeButtons;
+    private readonly ToggleButton _diagrams = new() { Content = "Diagrams" };
+    private readonly ToggleButton _easyChords = new() { Content = "Easy chords" };
+    private readonly ToggleButton _numbers = new() { Content = "Numbers" };
+    private readonly ComboBox _instrumentBox = new() { MinWidth = 220 };
+    private readonly ComboBox _tuningBox = new() { MinWidth = 220 };
+    private readonly ComboBox _pitchBox = new() { MinWidth = 220, ItemsSource = new[] { "Standard pitch", "Half step down", "Whole step down" } };
+    private readonly TextBlock _capoText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 36, TextAlignment = TextAlignment.Center };
+    private readonly StackPanel _capoChoices = new() { Spacing = 6 };
+    private readonly Flyout _chordsFlyout = new();
+    private readonly Flyout _chordFlyout = new();
+    private readonly DockPanel _stage = new();
+    private List<Instrument> _tuningChoices = [];
+    private bool _updatingChoices;
     private readonly double _deviceFontSize =
         UIKit.UIDevice.CurrentDevice.UserInterfaceIdiom == UIKit.UIUserInterfaceIdiom.Phone ? 17 : 22;
     private readonly TapTempo _taps = new();
@@ -97,7 +113,10 @@ internal sealed class StageView : UserControl
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         buttons.Children.Add(_play);
         buttons.Children.Add(new Button { Content = "Scroll ▾", Flyout = new Flyout { Content = ScrollPanel() } });
+        buttons.Children.Add(new Button { Content = "Chords ▾", Flyout = _chordsFlyout });
         buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = new Flyout { Content = TextPanel() } });
+        _chordsFlyout.Content = ChordsPanel();
+        _chordsFlyout.Opening += (_, _) => UpdateChordControls();
         var barContent = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
         barContent.Children.Add(MakeButton($"‹ {backLabel}", back));
         Grid.SetColumn(title, 1);
@@ -106,7 +125,7 @@ internal sealed class StageView : UserControl
         barContent.Children.Add(buttons);
         _bar.Child = barContent;
 
-        var root = new DockPanel();
+        var root = _stage;
         DockPanel.SetDock(_bar, Dock.Top);
         root.Children.Add(_bar);
         if (place is not null)
@@ -162,6 +181,170 @@ internal sealed class StageView : UserControl
     {
         _speedRow.Children.AddRange([MakeButton("−", () => StepSpeed(-1)), _speedText, MakeButton("+", () => StepSpeed(+1)), _tapTempo]);
         return new StackPanel { Spacing = 10, Children = { Row(_modeButtons), _speedRow, _scrollHint } };
+    }
+
+    // The player's instrument, for every song (as on the Mac, where it's View ▾ Diagrams for).
+    private Instrument PlayerInstrument => Instrument.Find(_settings.Instrument);
+
+    private SongTuning? CurrentTuning => SongTuning.For(_song.Tuning, _songSettings);
+
+    // What diagrams, fingerings, capo suggestions and the tuner are for: the player's instrument, in the
+    // song's tuning when that's for the same kind of instrument.
+    private Instrument CurrentInstrument => CurrentTuning?.Apply(PlayerInstrument) ?? PlayerInstrument;
+
+    private int TuningOffset => CurrentTuning?.Offset ?? 0;
+
+    // The capo when none is chosen for the song: the file's, except on a dulcimer, where a guitar capo means nothing.
+    private int DefaultCapo => CurrentInstrument.IsDiatonic ? 0 : _song.CapoFret;
+
+    // Chords ▾: what the chords show, the instrument and the song's tuning, the capo, and the tuner.
+    private Control ChordsPanel()
+    {
+        _diagrams.Click += (_, _) => SetChordOption(() => _settings.ShowDiagrams = _diagrams.IsChecked == true);
+        _easyChords.Click += (_, _) => SetChordOption(() => _settings.SimplifyChords = _easyChords.IsChecked == true);
+        _numbers.Click += (_, _) => SetChordOption(() => _settings.ChordNumbers = _numbers.IsChecked == true);
+        _instrumentBox.ItemsSource = Instrument.All.Select(i => i.Name).ToList();
+        _instrumentBox.SelectionChanged += (_, _) =>
+        {
+            if (_updatingChoices || _instrumentBox.SelectedIndex < 0)
+                return;
+            SetChordOption(() => _settings.Instrument = Instrument.All[_instrumentBox.SelectedIndex].Name);
+        };
+        _tuningBox.SelectionChanged += (_, _) => SongTuningChanged();
+        _pitchBox.SelectionChanged += (_, _) => SongTuningChanged();
+        var tuner = MakeButton("Tuner", ShowTuner);
+        tuner.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+        static TextBlock Label(string text) => new() { Text = text, FontSize = 13, Opacity = 0.7 };
+        return new ScrollViewer
+        {
+            MaxHeight = 560,
+            Content = new StackPanel
+            {
+                Spacing = 8,
+                MaxWidth = 340,
+                Children =
+                {
+                    Row(_diagrams, _easyChords, _numbers),
+                    Label("Instrument"),
+                    _instrumentBox,
+                    Label("This song's tuning"),
+                    _tuningBox,
+                    _pitchBox,
+                    Row(new TextBlock { Text = "Capo", VerticalAlignment = VerticalAlignment.Center },
+                        MakeButton("−", () => SetCapo(Capo - 1)), _capoText, MakeButton("+", () => SetCapo(Capo + 1))),
+                    _capoChoices,
+                    tuner,
+                },
+            },
+        };
+    }
+
+    private int Capo => _songSettings.Capo ?? DefaultCapo;
+
+    private void SetChordOption(Action change)
+    {
+        if (_updatingChoices)
+            return;
+        change();
+        _settings.Save();
+        UpdateChordControls();
+        Render();
+    }
+
+    private void UpdateChordControls()
+    {
+        _updatingChoices = true;
+        _diagrams.IsChecked = _settings.ShowDiagrams;
+        _easyChords.IsChecked = _settings.SimplifyChords;
+        _numbers.IsChecked = _settings.ChordNumbers;
+        _instrumentBox.SelectedIndex = Instrument.All.ToList().IndexOf(PlayerInstrument);
+
+        // The song's usual tuning first (what the file says, or the player's own), then the others for this instrument.
+        var player = PlayerInstrument;
+        var usual = SongTuning.Parse(_song.Tuning)?.Apply(player) ?? player;
+        _tuningChoices = [usual, .. Instrument.All.Where(i => i.Family == player.Family && i != usual)];
+        _tuningBox.ItemsSource = _tuningChoices
+            .Select((i, index) => index == 0 && usual != player ? $"As the song says: {SongTuning.ShortName(i)}" : i.Name)
+            .ToList();
+        _tuningBox.SelectedIndex = _songSettings.Tuning is { } name ? Math.Max(0, _tuningChoices.FindIndex(i => i.Name == name)) : 0;
+        _tuningBox.IsVisible = _tuningChoices.Count > 1;
+        _pitchBox.SelectedIndex = Math.Clamp(-TuningOffset, 0, 2);
+        _updatingChoices = false;
+
+        _capoText.Text = Capo.ToString();
+        _capoChoices.Children.Clear();
+        var choices = CapoSuggester.ForSong(_song, _songSettings.Transpose, _keyIncludesCapo, TuningOffset, _settings.SimplifyChords, CurrentInstrument);
+        if (choices.Count > 0)
+            _capoChoices.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", FontSize = 13, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
+        foreach (var choice in choices)
+        {
+            var button = new Button
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = choice.Capo == Capo ? $"{choice.Title}  (current)" : choice.Title, FontWeight = FontWeight.SemiBold },
+                        new TextBlock { Text = choice.Detail, Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap },
+                    },
+                },
+            };
+            var capo = choice.Capo;
+            button.Click += (_, _) => SetCapo(capo);
+            _capoChoices.Children.Add(button);
+        }
+    }
+
+    private void SongTuningChanged()
+    {
+        if (_updatingChoices || _tuningBox.SelectedIndex < 0 || _pitchBox.SelectedIndex < 0)
+            return;
+        // Remember only a choice that differs from what the song itself says (as the Mac does).
+        var file = SongTuning.Parse(_song.Tuning);
+        _songSettings.Tuning = _tuningBox.SelectedIndex == 0 ? null : _tuningChoices[_tuningBox.SelectedIndex].Name;
+        var offset = -_pitchBox.SelectedIndex;
+        _songSettings.TuningOffset = offset == (file?.Offset ?? 0) ? null : offset;
+        _saved();
+        UpdateChordControls();
+        Render();
+    }
+
+    private void SetCapo(int capo)
+    {
+        capo = Math.Clamp(capo, 0, 11);
+        _songSettings.Capo = capo == DefaultCapo ? null : capo;
+        _saved();
+        UpdateChordControls();
+        Render();
+    }
+
+    // A chord's fingerings: the song's own first. Songs can't be changed here, so there's nothing to save.
+    private void ShowChord(ChordTap tap)
+    {
+        List<(ChordShape, string?)> shapes = [];
+        if (tap.DefinedShape is { } defined)
+            shapes.Add((defined, "From the song"));
+        shapes.AddRange(ChordShapeFinder.Alternatives(tap.Name, CurrentInstrument)
+            .Where(s => !s.Equals(tap.DefinedShape))
+            .Select(s => (s, (string?)null)));
+        _chordFlyout.Hide();
+        _chordFlyout.Content = new ChordPopup(tap.Name, shapes, _deviceFontSize, SongPalette.FromTheme(MainView.CurrentTheme(_settings)), CurrentInstrument);
+        _chordFlyout.ShowAt(tap.Anchor);
+    }
+
+    // The tuner covers the song until Done, tuned to the song's own tuning.
+    private void ShowTuner()
+    {
+        _chordsFlyout.Hide();
+        _smart.Stop();
+        Content = new TunerView(CurrentInstrument.Retuned(TuningOffset), SongPalette.FromTheme(MainView.CurrentTheme(_settings)), _settings, () =>
+        {
+            Content = _stage;
+            Focus();
+        });
     }
 
     // Aa ▾: text size, transpose and theme.
@@ -294,6 +477,24 @@ internal sealed class StageView : UserControl
             SetMode(mode);
             Avalonia.Threading.DispatcherTimer.RunOnce(_smart.Start, TimeSpan.FromSeconds(1));
         }
+        // CHORDPRO_LIVE_SHOW=chords opens Chords ▾, =tuner the tuner (with CHORDPRO_LIVE_TUNER=test, never the
+        // microphone), =chord:G the popup for G at the song's first chord.
+        switch (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SHOW"))
+        {
+            case "chords":
+                Avalonia.Threading.DispatcherTimer.RunOnce(() => _chordsFlyout.ShowAt(_bar), TimeSpan.FromSeconds(1));
+                break;
+            case "tuner":
+                ShowTuner();
+                break;
+            case ['c', 'h', 'o', 'r', 'd', ':', .. var chord]:
+                Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+                {
+                    if (_content.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Classes.Contains("chord")) is { } anchor)
+                        ShowChord(new ChordTap(chord, chord, null, anchor));
+                }, TimeSpan.FromSeconds(1));
+                break;
+        }
 #endif
     }
 
@@ -357,10 +558,20 @@ internal sealed class StageView : UserControl
         {
             FontSize = SongFontSize,
             Transpose = transpose,
-            Capo = _songSettings.Capo,
+            // A guitar capo in the file means nothing on a dulcimer: show the chords as heard.
+            Capo = _songSettings.Capo ?? (CurrentInstrument.IsDiatonic ? 0 : null),
+            ShowDiagrams = _settings.ShowDiagrams,
+            Instrument = CurrentInstrument,
+            SimplifyChords = _settings.SimplifyChords,
+            ChordNumbers = _settings.ChordNumbers,
             Columns = _columns,
             Palette = palette,
             KeyIncludesCapo = _keyIncludesCapo,
+            ChordTapped = ShowChord,
+            // After the tap: transposing rebuilds the song, including the button being tapped.
+            TransposeBy = shift => Avalonia.Threading.Dispatcher.UIThread.Post(() => ChangeTranspose(shift)),
+            Tuning = SongTuning.Note(CurrentInstrument, PlayerInstrument, TuningOffset),
+            TuningOffset = TuningOffset,
         });
         _content.Child = _renderer.Render(_song);
         _smart.InvalidateTimeline();

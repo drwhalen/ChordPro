@@ -360,17 +360,7 @@ public partial class MainWindow : Window
     private Instrument PlayerInstrument => Instrument.Find(_settings.Instrument);
 
     // The song's own tuning: chosen for it in the View menu, or given by its {x_tuning}.
-    private SongTuning? CurrentSongTuning
-    {
-        get
-        {
-            var saved = _path is null ? null : _settings.SettingsOf(_path);
-            var file = SongTuning.Parse(_song?.Tuning);
-            var instrument = saved?.Tuning is { } name ? Instrument.Find(name) : file?.Instrument;
-            var offset = saved?.TuningOffset ?? file?.Offset ?? 0;
-            return instrument is null && offset == 0 ? null : new SongTuning(instrument, offset);
-        }
-    }
+    private SongTuning? CurrentSongTuning => SongTuning.For(_song?.Tuning, _path is null ? null : _settings.SettingsOf(_path));
 
     // What diagrams, fingerings and capo suggestions are for: the player's instrument, in the song's
     // tuning when that's for the same kind of instrument.
@@ -382,21 +372,7 @@ public partial class MainWindow : Window
     private int TuningOffsetOf(SongInfo song) => _settings.SettingsOf(song.Path)?.TuningOffset ?? song.TuningOffset;
 
     // The song's tuning for its header, when it isn't the player's usual one.
-    private string? TuningNote()
-    {
-        var parts = new List<string>();
-        if (CurrentInstrument != PlayerInstrument)
-            parts.Add(ShortName(CurrentInstrument));
-        if (TuningOffset != 0)
-            parts.Add(SongTuning.DescribeOffset(TuningOffset));
-        return parts.Count == 0 ? null : string.Join(", ", parts);
-    }
-
-    // "Guitar (Drop D)" → "Drop D"; "Mandolin" stays.
-    private static string ShortName(Instrument instrument) =>
-        instrument.Name.IndexOf('(') is var open and > 0 && instrument.Name.EndsWith(')')
-            ? instrument.Name[(open + 1)..^1]
-            : instrument.Name;
+    private string? TuningNote() => SongTuning.Note(CurrentInstrument, PlayerInstrument, TuningOffset);
 
     // The tunings offered for this song: the song's own (or the player's), then the others for the
     // same kind of instrument.
@@ -413,7 +389,7 @@ public partial class MainWindow : Window
 
         _updatingTuning = true;
         SongTuningBox.ItemsSource = _tuningChoices
-            .Select((i, index) => index == 0 && usual != player ? $"As the song says: {ShortName(i)}" : i.Name)
+            .Select((i, index) => index == 0 && usual != player ? $"As the song says: {SongTuning.ShortName(i)}" : i.Name)
             .ToList();
         SongTuningBox.SelectedIndex = saved?.Tuning is { } name ? Math.Max(0, _tuningChoices.FindIndex(i => i.Name == name)) : 0;
         SongPitchBox.SelectedIndex = Math.Clamp(-TuningOffset, 0, 2);
@@ -565,35 +541,19 @@ public partial class MainWindow : Window
         if (_song is null)
             return;
 
-        // Work from the chords as heard, so every suggestion sounds the same as now.
-        var sounding = _transpose + FileCapo;
-        var writtenKey = ChordTransposer.WrittenKey(_song.Key, FileCapo, _settings.KeyIncludesCapo, TuningOffset);
-        var preferFlats = ChordTransposer.PrefersFlats(writtenKey, sounding);
-        var chords = _song.ChordUsages()
-            .Select(c => ChordTransposer.Transpose(_settings.SimplifyChords ? ChordSimplifier.Simplify(c) : c, sounding, preferFlats))
-            .GroupBy(c => c)
-            .Select(g => (g.Key, g.Count()))
-            .ToList();
-        if (chords.Count == 0)
+        var choices = CapoSuggester.ForSong(_song, _transpose, _settings.KeyIncludesCapo, TuningOffset, _settings.SimplifyChords, CurrentInstrument);
+        if (choices.Count == 0)
         {
             CapoSuggestions.Children.Add(new TextBlock { Text = "This song has no chords." });
             return;
         }
 
-        var soundingKey = writtenKey is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
         var current = _capo ?? DefaultCapo;
         CapoSuggestions.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 4) });
 
-        foreach (var suggestion in CapoSuggester.Suggest(chords, CurrentInstrument, soundingKey).Take(4))
+        foreach (var choice in choices)
         {
-            var shapesKey = soundingKey is null ? null
-                : ChordTransposer.Transpose(soundingKey, -suggestion.Capo, ChordTransposer.PrefersFlats(soundingKey, -suggestion.Capo));
-            var title = suggestion.Capo == 0 ? "No capo" : $"Capo {suggestion.Capo}";
-            if (shapesKey is not null)
-                title += $" · {shapesKey} shapes";
-            if (suggestion.Capo == current)
-                title += "  (current)";
-            var barre = suggestion.BarreChords switch { 0 => "no barre chords", 1 => "1 barre chord", var n => $"{n} barre chords" };
+            var title = choice.Capo == current ? $"{choice.Title}  (current)" : choice.Title;
 
             var button = new Button
             {
@@ -604,11 +564,11 @@ public partial class MainWindow : Window
                     Children =
                     {
                         new TextBlock { Text = title, FontWeight = FontWeight.SemiBold },
-                        new TextBlock { Text = $"{string.Join("  ", suggestion.Chords)}  ·  {barre}", Opacity = 0.75, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
+                        new TextBlock { Text = choice.Detail, Opacity = 0.75, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
                     },
                 },
             };
-            var capo = suggestion.Capo;
+            var capo = choice.Capo;
             button.Click += (_, _) =>
             {
                 CapoSuggestButton.Flyout?.Hide();
@@ -1707,8 +1667,8 @@ public partial class MainWindow : Window
         FitFilterCombo.ItemsSource = new[]
         {
             "Any chords",
-            $"Fits my {ShortName(player)}",
-            $"Fits my {ShortName(player)}, transposed if needed",
+            $"Fits my {SongTuning.ShortName(player)}",
+            $"Fits my {SongTuning.ShortName(player)}, transposed if needed",
         };
         FitFilterCombo.SelectedIndex = Math.Max(0, index);
         FitFilterCombo.IsVisible = player.IsDiatonic;

@@ -32,6 +32,8 @@
             </array>
         </dict>
     </dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>The tuner listens to your instrument through the microphone. Nothing is recorded or sent anywhere.</string>
     <key>UIRequiresFullScreen</key>
     <true/>
     <key>UISupportedInterfaceOrientations</key>

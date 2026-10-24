@@ -76,6 +76,25 @@ public class InstrumentFitTests
         Assert.Same(Instrument.Guitar, Instrument.Guitar.Retuned(0));
     }
 
+    [Fact]
+    public void ASongsChosenTuningWinsOverItsFiles()
+    {
+        Assert.Null(SongTuning.For(null, null));
+        Assert.Equal(new SongTuning(Instrument.GuitarDropD, -1), SongTuning.For("Drop D, half step down", null));
+        // Chosen on another device: back to standard pitch, in DADGAD.
+        var saved = new SongSettings { Tuning = Instrument.GuitarDadgad.Name, TuningOffset = 0 };
+        Assert.Equal(new SongTuning(Instrument.GuitarDadgad, 0), SongTuning.For("Drop D, half step down", saved));
+    }
+
+    [Fact]
+    public void NotesATuningOnlyWhenItIsNotThePlayersUsualOne()
+    {
+        Assert.Null(SongTuning.Note(Instrument.Guitar, Instrument.Guitar, 0));
+        Assert.Equal("Drop D, half step down", SongTuning.Note(Instrument.GuitarDropD, Instrument.Guitar, -1));
+        Assert.Equal("whole step down", SongTuning.Note(Instrument.Guitar, Instrument.Guitar, -2));
+        Assert.Equal("Mandolin", SongTuning.ShortName(Instrument.Mandolin));
+    }
+
     [Theory]
     [InlineData("{meta: tuning Drop D}")]
     [InlineData("{x_tuning: Drop D}")]

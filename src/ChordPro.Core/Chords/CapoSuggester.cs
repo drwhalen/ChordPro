@@ -3,6 +3,11 @@ namespace ChordPro.Core.Chords;
 /// <summary>A capo position and what the song's chords become with it.</summary>
 public sealed record CapoSuggestion(int Capo, IReadOnlyList<string> Chords, double Difficulty, int BarreChords, int UnplayableChords);
 
+/// <summary>A capo position offered for a song, described for people.</summary>
+/// <param name="Title">"Capo 2 · G shapes", or "No capo".</param>
+/// <param name="Detail">The chords played with it, and how many are barre chords.</param>
+public sealed record CapoChoice(int Capo, string Title, string Detail);
+
 /// <summary>
 /// Ranks capo positions by how easy the song's chords are to play with them. The song sounds the
 /// same at every position; only the shapes change.
@@ -10,6 +15,39 @@ public sealed record CapoSuggestion(int Capo, IReadOnlyList<string> Chords, doub
 public static class CapoSuggester
 {
     public const int MaxCapo = 7;
+
+    /// <summary>
+    /// The easiest capo positions for a song as it's shown now (transposed, with its file's capo), each
+    /// sounding the same as now; empty when it has no chords.
+    /// </summary>
+    /// <param name="simplify">The song is shown with easy chords (<see cref="ChordSimplifier"/>).</param>
+    public static IReadOnlyList<CapoChoice> ForSong(Song song, int transpose, bool keyIncludesCapo, int tuningOffset,
+        bool simplify, Instrument instrument, int count = 4)
+    {
+        // Work from the chords as heard, so every suggestion sounds the same as now.
+        var sounding = transpose + song.CapoFret;
+        var writtenKey = ChordTransposer.WrittenKey(song.Key, song.CapoFret, keyIncludesCapo, tuningOffset);
+        var preferFlats = ChordTransposer.PrefersFlats(writtenKey, sounding);
+        var chords = song.ChordUsages()
+            .Select(c => ChordTransposer.Transpose(simplify ? ChordSimplifier.Simplify(c) : c, sounding, preferFlats))
+            .GroupBy(c => c)
+            .Select(g => (g.Key, g.Count()))
+            .ToList();
+        if (chords.Count == 0)
+            return [];
+
+        var soundingKey = writtenKey is { } key ? ChordTransposer.Transpose(key, sounding, preferFlats) : null;
+        return [.. Suggest(chords, instrument, soundingKey).Take(count).Select(suggestion =>
+        {
+            var shapesKey = soundingKey is null ? null
+                : ChordTransposer.Transpose(soundingKey, -suggestion.Capo, ChordTransposer.PrefersFlats(soundingKey, -suggestion.Capo));
+            var title = suggestion.Capo == 0 ? "No capo" : $"Capo {suggestion.Capo}";
+            if (shapesKey is not null)
+                title += $" · {shapesKey} shapes";
+            var barre = suggestion.BarreChords switch { 0 => "no barre chords", 1 => "1 barre chord", var n => $"{n} barre chords" };
+            return new CapoChoice(suggestion.Capo, title, $"{string.Join("  ", suggestion.Chords)}  ·  {barre}");
+        })];
+    }
 
     /// <param name="soundingChords">The chords as heard (written chords moved by any transposition and the file's capo), with how often each is played.</param>
     /// <param name="soundingKey">The key as heard, used to spell the shapes with sharps or flats; may be null.</param>

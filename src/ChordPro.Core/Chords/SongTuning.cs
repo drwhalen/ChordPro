@@ -71,6 +71,39 @@ public sealed record SongTuning(Instrument? Instrument, int Offset)
     public Instrument Apply(Instrument player) =>
         Instrument is { } own && own.Family == player.Family ? own : player;
 
+    /// <summary>
+    /// A song's tuning: the one chosen for it (kept with its <see cref="SongSettings"/>), otherwise the
+    /// one its file gives; null when it's played in the usual tuning.
+    /// </summary>
+    public static SongTuning? For(string? fileTuning, SongSettings? saved)
+    {
+        var file = Parse(fileTuning);
+        var instrument = saved?.Tuning is { } name ? Instrument.Find(name) : file?.Instrument;
+        var offset = saved?.TuningOffset ?? file?.Offset ?? 0;
+        return instrument is null && offset == 0 ? null : new SongTuning(instrument, offset);
+    }
+
+    /// <summary>
+    /// The tuning to note in a song's header ("Drop D, half step down"), when the song isn't played in
+    /// the player's usual one; otherwise null.
+    /// </summary>
+    /// <param name="shown">The instrument the song is shown for (<see cref="Apply"/>).</param>
+    public static string? Note(Instrument shown, Instrument player, int offset)
+    {
+        List<string> parts = [];
+        if (shown != player)
+            parts.Add(ShortName(shown));
+        if (offset != 0)
+            parts.Add(DescribeOffset(offset));
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
+    /// <summary>An instrument's name without its family: "Guitar (Drop D)" → "Drop D"; "Mandolin" stays.</summary>
+    public static string ShortName(Instrument instrument) =>
+        instrument.Name.IndexOf('(') is var open and > 0 && instrument.Name.EndsWith(')')
+            ? instrument.Name[(open + 1)..^1]
+            : instrument.Name;
+
     /// <summary>The pitch offset for people: "half step down", "whole step down", "3 half steps down".</summary>
     public static string DescribeOffset(int semitones) => semitones switch
     {
