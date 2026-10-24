@@ -45,6 +45,12 @@ internal sealed class MobileSettings
     public bool SimplifyChords { get; set; }
     /// <summary>Nashville numbers under the chords.</summary>
     public bool ChordNumbers { get; set; }
+    /// <summary>The stage ignores touches except page turns until unlocked (by holding Unlock).</summary>
+    public bool Locked { get; set; }
+    /// <summary>Page turns move half a screen, so the line being read moves up rather than off the screen.</summary>
+    public bool HalfPageTurns { get; set; }
+    public Core.PedalLayout PedalLayout { get; set; }
+    public Core.PedalHold PedalHold { get; set; }
     /// <summary>The tuner's A4, in Hz.</summary>
     public double TunerReference { get; set; } = Core.Tuning.Note.StandardReference;
 
@@ -76,6 +82,6 @@ internal sealed class MobileSettings
     }
 }
 
-[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSourceGenerationOptions(WriteIndented = true, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(MobileSettings))]
 internal sealed partial class MobileJson : JsonSerializerContext;

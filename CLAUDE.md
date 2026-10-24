@@ -30,7 +30,8 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   - `ChordProParser`, `Song` (model), `SongFile` (read/write keeping line endings and BOM),
     `ChordTransposer` (also written/sounding keys), `Setlist`
     (incl. LivePrompter `.txt` setlists; `Step` moves through it past set dividers), `Gig` (a setlist being played:
-    played after 30 s on screen, skipped, requests, moves, the set clock; saved as JSON, library-relative paths), `SongLibrary` (scan, group, filter, key-convention guess),
+    played after 30 s on screen, skipped, requests, moves, the set clock; saved as JSON, library-relative paths),
+    `Pedal` (pedal buttons to stage actions: layouts and holds), `SongLibrary` (scan, group, filter, key-convention guess),
     `LibraryCheck`, `SetlistPlanner` (scores song-to-song steps and plans sets that flow), `SetLength`
     (running time from `{duration}`), `EditorInsert` (the editor's Insert menu: sections, directive lines, the key at the cursor),
     `NewSong` (New song… and Save As…: file name, starting template, a copy moved to another key),
@@ -72,8 +73,8 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   returning to the foreground; plays setlists), `LibraryView` (Songs | Setlists, search, grouping),
   `SetlistView` (a setlist's songs and sets with running times; tapping one starts a gig), `GigView` (the gig:
   played/skipped/requests, Edit to move and skip, the set clock, End gig), `RequestView`, `GigLogView` (finished gigs), `StageView` (▶, Scroll ▾ with
-  Manual/Timed/Musical, speed or tempo and tap tempo, Chords ▾ with diagrams, easy chords, numbers, instrument,
-  the song's tuning, capo and capo suggestions, and the tuner; Aa ▾ with text size, transpose and theme; chord popups;
+  Manual/Timed/Musical, speed or tempo and tap tempo, half-page turns and the pedal set-up, Chords ▾ with diagrams, easy chords, numbers, instrument,
+  the song's tuning, capo and capo suggestions, and the tuner; Aa ▾ with Lock the stage (Hold to unlock), text size, transpose and theme; chord popups;
   tap/pedal paging; per-song settings shared with the Mac; in a gig, Previous / Next with the
   next song's key and the set clock, and a pedal press at either end of a song moves to the next or previous song), `LibraryAccess` (Files folder picker,
   security-scoped bookmark, `LibraryMirror` refresh into Application Support, asks iCloud to download
@@ -82,7 +83,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   Debug builds read `CHORDPRO_LIVE_LIBRARY` (a library folder on the Mac, instead of the picker) and
   `CHORDPRO_LIVE_OPEN` (opens a song by title), `CHORDPRO_LIVE_SETLIST` (opens a setlist by name) and
   `CHORDPRO_LIVE_SETLIST_SONG` (plays its entry at that index), `CHORDPRO_LIVE_SCROLL` (starts scrolling
-  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `tuner` or `chord:G`) and `CHORDPRO_LIVE_TUNER=test` (a test tone
+  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `scroll`, `tuner`, `lock` or `chord:G`) and `CHORDPRO_LIVE_TUNER=test` (a test tone
   instead of the microphone), `CHORDPRO_LIVE_GIG` (`request`, `edit` or `log`, on a gig resumed at launch), passed as `SIMCTL_CHILD_…` to `simctl launch`. It suppresses IL2037/IL2104,
   which come from Avalonia's own iOS and designer assemblies.
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.

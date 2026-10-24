@@ -23,7 +23,8 @@ internal sealed record SetlistPlace(string? Next, bool HasPrevious, Action<int> 
 /// <summary>
 /// A song on stage: paged by taps or a pedal, or scrolled (timed to its length, or musically by its tempo
 /// and bars), with text size, transpose and theme; chord diagrams, easy chords, numbers, the song's tuning,
-/// capo suggestions and a tuner. Its settings are shared with the Mac through the library.
+/// capo suggestions and a tuner. Pedals can be set up, and the stage locked against stray touches. Its
+/// settings are shared with the Mac through the library.
 /// </summary>
 internal sealed class StageView : UserControl
 {
@@ -65,6 +66,8 @@ internal sealed class StageView : UserControl
     private readonly StackPanel _capoChoices = new() { Spacing = 6 };
     private readonly Flyout _chordsFlyout = new();
     private readonly Flyout _chordFlyout = new();
+    private readonly Flyout _textFlyout = new();
+    private readonly Button _scrollButton = new() { Content = "Scroll ▾" };
     private readonly DockPanel _stage = new();
     private List<Instrument> _tuningChoices = [];
     private bool _updatingChoices;
@@ -73,6 +76,17 @@ internal sealed class StageView : UserControl
     private readonly TapTempo _taps = new();
     private readonly TextBlock _clock = new() { FontSize = 14, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly Avalonia.Threading.DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private readonly Avalonia.Threading.DispatcherTimer _holdTimer = new() { Interval = Pedal.HoldTime };
+    private readonly Avalonia.Threading.DispatcherTimer _unlockTimer = new() { Interval = TimeSpan.FromSeconds(0.8) };
+    private readonly Grid _barContent = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+    private readonly Grid _lockedBar = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+    private readonly Button _unlock = new() { Content = "Hold to unlock" };
+    private readonly ToggleButton _halfPages = new() { Content = "Half-page turns" };
+    private readonly ComboBox _pedalLayout = new() { MinWidth = 260, ItemsSource = new[] { "Turn pages, then change songs", "Change songs", "← → change songs, ↑ ↓ turn pages" } };
+    private readonly ComboBox _pedalHold = new() { MinWidth = 260, ItemsSource = new[] { "Holding a pedal does nothing more", "Hold to change songs", "Hold to start or stop scrolling" } };
+    // The pedal button held down, while waiting to see whether it's a press or a hold.
+    private PedalButton? _heldButton;
+    private bool _holdDone;
     private readonly Stopwatch _tapClock = Stopwatch.StartNew();
     private SongRenderer? _renderer;
     private int _columns = 1;
@@ -92,7 +106,8 @@ internal sealed class StageView : UserControl
         _smart = new SmartScroller(_scroller)
         {
             TimelineFactory = BuildTimeline,
-            PageTarget = (direction, offset, height) => _renderer?.PageTop(direction, offset, height, _content),
+            // Half-page turns aim at half the screen, so the line being read moves to the top half.
+            PageTarget = (direction, offset, height) => _renderer?.PageTop(direction, offset, _settings.HalfPageTurns ? height / 2 : height, _content),
         };
         _smart.RunningChanged += (_, _) => UpdateScrollControls();
 
@@ -115,18 +130,19 @@ internal sealed class StageView : UserControl
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         buttons.Children.Add(_play);
-        buttons.Children.Add(new Button { Content = "Scroll ▾", Flyout = new Flyout { Content = ScrollPanel() } });
+        _scrollButton.Flyout = new Flyout { Content = ScrollPanel() };
+        buttons.Children.Add(_scrollButton);
         buttons.Children.Add(new Button { Content = "Chords ▾", Flyout = _chordsFlyout });
-        buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = new Flyout { Content = TextPanel() } });
+        _textFlyout.Content = TextPanel();
+        buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = _textFlyout });
         _chordsFlyout.Content = ChordsPanel();
         _chordsFlyout.Opening += (_, _) => UpdateChordControls();
-        var barContent = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
-        barContent.Children.Add(MakeButton($"‹ {backLabel}", back));
+        _barContent.Children.Add(MakeButton($"‹ {backLabel}", back));
         Grid.SetColumn(title, 1);
-        barContent.Children.Add(title);
+        _barContent.Children.Add(title);
         Grid.SetColumn(buttons, 2);
-        barContent.Children.Add(buttons);
-        _bar.Child = barContent;
+        _barContent.Children.Add(buttons);
+        BuildLockedBar(song.Title ?? "");
 
         var root = _stage;
         DockPanel.SetDock(_bar, Dock.Top);
@@ -158,6 +174,8 @@ internal sealed class StageView : UserControl
         Focusable = true;
         // A tap on the lower part of the song turns the page forward, on the upper part back, as on the Mac.
         _scroller.AddHandler(TappedEvent, (_, e) => Page(e.GetPosition(_scroller).Y > _scroller.Bounds.Height / 3 ? +1 : -1));
+        _holdTimer.Tick += (_, _) => PedalHeld();
+        ShowLock();
         UpdateScrollControls();
     }
 
@@ -187,7 +205,34 @@ internal sealed class StageView : UserControl
     private Control ScrollPanel()
     {
         _speedRow.Children.AddRange([MakeButton("−", () => StepSpeed(-1)), _speedText, MakeButton("+", () => StepSpeed(+1)), _tapTempo]);
-        return new StackPanel { Spacing = 10, Children = { Row(_modeButtons), _speedRow, _scrollHint } };
+        _halfPages.IsChecked = _settings.HalfPageTurns;
+        _halfPages.Click += (_, _) =>
+        {
+            _settings.HalfPageTurns = _halfPages.IsChecked == true;
+            _settings.Save();
+        };
+        _pedalLayout.SelectedIndex = (int)_settings.PedalLayout;
+        _pedalLayout.SelectionChanged += (_, _) =>
+        {
+            _settings.PedalLayout = (PedalLayout)Math.Max(0, _pedalLayout.SelectedIndex);
+            _settings.Save();
+        };
+        _pedalHold.SelectedIndex = (int)_settings.PedalHold;
+        _pedalHold.SelectionChanged += (_, _) =>
+        {
+            _settings.PedalHold = (PedalHold)Math.Max(0, _pedalHold.SelectedIndex);
+            _settings.Save();
+        };
+        return new StackPanel
+        {
+            Spacing = 10,
+            Children =
+            {
+                Row(_modeButtons), _speedRow, _scrollHint,
+                new TextBlock { Text = "Pages and pedal", FontSize = 13, Opacity = 0.7, Margin = new Thickness(0, 6, 0, 0) },
+                _halfPages, _pedalLayout, _pedalHold,
+            },
+        };
     }
 
     // The player's instrument, for every song (as on the Mac, where it's View ▾ Diagrams for).
@@ -354,12 +399,13 @@ internal sealed class StageView : UserControl
         });
     }
 
-    // Aa ▾: text size, transpose and theme.
+    // Aa ▾: the lock, text size, transpose and theme.
     private Control TextPanel() => new StackPanel
     {
         Spacing = 10,
         Children =
         {
+            MakeButton("Lock the stage", () => SetLocked(true)),
             Row(MakeButton("A−", () => ChangeFont(-2)), MakeButton("A+", () => ChangeFont(+2))),
             Row(new TextBlock { Text = "Transpose", VerticalAlignment = VerticalAlignment.Center },
                 MakeButton("−", () => ChangeTranspose(-1)), _transposeText, MakeButton("+", () => ChangeTranspose(+1))),
@@ -496,6 +542,12 @@ internal sealed class StageView : UserControl
             case "tuner":
                 ShowTuner();
                 break;
+            case "lock":
+                SetLocked(true);
+                break;
+            case "scroll":
+                Avalonia.Threading.DispatcherTimer.RunOnce(() => _scrollButton.Flyout?.ShowAt(_bar), TimeSpan.FromSeconds(1));
+                break;
             case ['c', 'h', 'o', 'r', 'd', ':', .. var chord]:
                 Avalonia.Threading.DispatcherTimer.RunOnce(() =>
                 {
@@ -511,6 +563,8 @@ internal sealed class StageView : UserControl
     {
         _smart.Stop();
         _clockTimer.Stop();
+        _holdTimer.Stop();
+        CancelUnlock();
         base.OnDetachedFromVisualTree(e);
     }
 
@@ -526,18 +580,137 @@ internal sealed class StageView : UserControl
     // the lines top to bottom.
     private int ColumnsFor(double width) => width >= TwoColumnMinWidth && Mode == ScrollMode.Manual ? 2 : 1;
 
-    // Pedals send arrow keys, Page Up/Down or Space. With a two-button pedal, forward and back are all there
-    // is, so they also move through the setlist at either end of a song. Space starts and stops scrolling.
+    // ---- Lock ------------------------------------------------------------------------------------
+
+    // Locked, the toolbar is just the title and Hold to unlock, the footer's buttons don't respond and chords
+    // don't open; taps on the song still turn pages, and pedals work as ever.
+    private void BuildLockedBar(string title)
+    {
+        _lockedBar.Children.Add(new TextBlock
+        {
+            Text = $"🔒 {title}",
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(8, 0),
+        });
+        Grid.SetColumn(_unlock, 1);
+        _lockedBar.Children.Add(_unlock);
+        // A hold, so a brush of the hand doesn't unlock it. (Button takes the pointer events itself.)
+        _unlock.AddHandler(PointerPressedEvent, (_, _) =>
+        {
+            _unlock.Content = "Keep holding…";
+            _unlockTimer.Start();
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        _unlock.AddHandler(PointerReleasedEvent, (_, _) => CancelUnlock(), Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        _unlock.PointerCaptureLost += (_, _) => CancelUnlock();
+        _unlockTimer.Tick += (_, _) =>
+        {
+            CancelUnlock();
+            SetLocked(false);
+        };
+    }
+
+    private void CancelUnlock()
+    {
+        _unlockTimer.Stop();
+        _unlock.Content = "Hold to unlock";
+    }
+
+    private void SetLocked(bool locked)
+    {
+        _textFlyout.Hide();
+        _settings.Locked = locked;
+        _settings.Save();
+        ShowLock();
+        Render(); // chords open popups only when unlocked
+        Focus();
+    }
+
+    private void ShowLock()
+    {
+        var locked = _settings.Locked;
+        _bar.Child = locked ? _lockedBar : _barContent;
+        _footer.IsHitTestVisible = !locked;
+    }
+
+    // ---- Pedals ----------------------------------------------------------------------------------
+
+    // Pedals send arrow keys or Page Up/Down; what they do is set up under Scroll ▾ (Pedal). Space starts and
+    // stops scrolling (or turns the page when scrolling by hand).
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        switch (e.Key)
+        if (e.Key == Key.Space)
         {
-            case Key.Space when Mode != ScrollMode.Manual: _smart.Toggle(); break;
-            case Key.Down or Key.Right or Key.PageDown or Key.Space: Page(+1); break;
-            case Key.Up or Key.Left or Key.PageUp: Page(-1); break;
-            default: base.OnKeyDown(e); return;
+            if (Mode != ScrollMode.Manual)
+                _smart.Toggle();
+            else
+                Page(+1);
+            e.Handled = true;
+            return;
+        }
+        if (ButtonFor(e.Key) is not { } button)
+        {
+            base.OnKeyDown(e);
+            return;
         }
         e.Handled = true;
+        if (_settings.PedalHold == PedalHold.Nothing)
+        {
+            Do(Pedal.Action(button, held: false, _settings.PedalLayout, _settings.PedalHold));
+            return;
+        }
+        // Wait to see whether it's held (a held key repeats; only the first counts).
+        if (_heldButton is not null)
+            return;
+        _heldButton = button;
+        _holdDone = false;
+        _holdTimer.Start();
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (ButtonFor(e.Key) is not { } button || button != _heldButton)
+        {
+            base.OnKeyUp(e);
+            return;
+        }
+        e.Handled = true;
+        _holdTimer.Stop();
+        _heldButton = null;
+        if (!_holdDone)
+            Do(Pedal.Action(button, held: false, _settings.PedalLayout, _settings.PedalHold));
+    }
+
+    private void PedalHeld()
+    {
+        _holdTimer.Stop();
+        if (_heldButton is not { } button)
+            return;
+        _holdDone = true;
+        Do(Pedal.Action(button, held: true, _settings.PedalLayout, _settings.PedalHold));
+    }
+
+    private static PedalButton? ButtonFor(Key key) => key switch
+    {
+        Key.Left => PedalButton.Left,
+        Key.Right => PedalButton.Right,
+        Key.Up => PedalButton.Up,
+        Key.Down => PedalButton.Down,
+        Key.PageUp => PedalButton.PageUp,
+        Key.PageDown => PedalButton.PageDown,
+        _ => null,
+    };
+
+    private void Do((PedalMove Move, int Direction) action)
+    {
+        switch (action.Move)
+        {
+            case PedalMove.Page: _smart.Page(action.Direction); break;
+            case PedalMove.PageThenSong: Page(action.Direction); break;
+            case PedalMove.Song: _place?.Step(action.Direction); break;
+            case PedalMove.ToggleScrolling when Mode != ScrollMode.Manual: _smart.Toggle(); break;
+        }
     }
 
     private void Page(int direction)
@@ -577,7 +750,7 @@ internal sealed class StageView : UserControl
             Columns = _columns,
             Palette = palette,
             KeyIncludesCapo = _keyIncludesCapo,
-            ChordTapped = ShowChord,
+            ChordTapped = _settings.Locked ? null : ShowChord,
             // After the tap: transposing rebuilds the song, including the button being tapped.
             TransposeBy = shift => Avalonia.Threading.Dispatcher.UIThread.Post(() => ChangeTranspose(shift)),
             Tuning = SongTuning.Note(CurrentInstrument, PlayerInstrument, TuningOffset),
