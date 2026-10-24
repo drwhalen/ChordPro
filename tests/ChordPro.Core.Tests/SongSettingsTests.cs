@@ -60,6 +60,19 @@ public sealed class SongSettingsTests : IDisposable
     }
 
     [Fact]
+    public void StageNotesWrittenOnTheIPadReachTheMac()
+    {
+        var mac = OpenDevice();
+        var ipad = OpenDevice();
+        ipad.GetOrAdd("Rock/Song.cho").Notes = "Drop the 2nd verse\nLong intro";
+        Assert.True(ipad.Save());
+
+        _now = _now.AddMinutes(1);
+        mac.Refresh();
+        Assert.Equal("Drop the 2nd verse\nLong intro", mac.Get("Rock/Song.cho")?.Notes);
+    }
+
+    [Fact]
     public void TheNewerChangeToASongWins()
     {
         var mac = OpenDevice();

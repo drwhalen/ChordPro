@@ -399,13 +399,32 @@ internal sealed class StageView : UserControl
         });
     }
 
-    // Aa ▾: the lock, text size, transpose and theme.
+    // The song's notes cover it until Done.
+    private void ShowNotes()
+    {
+        _textFlyout.Hide();
+        _smart.Stop();
+        Content = new NotesView(_song.Title ?? "", _songSettings.Notes, SongPalette.FromTheme(MainView.CurrentTheme(_settings)), notes =>
+        {
+            if (notes != _songSettings.Notes)
+            {
+                _songSettings.Notes = notes;
+                _saved();
+            }
+            Content = _stage;
+            Render();
+            Focus();
+        });
+    }
+
+    // Aa ▾: the lock, notes, text size, transpose and theme.
     private Control TextPanel() => new StackPanel
     {
         Spacing = 10,
         Children =
         {
             MakeButton("Lock the stage", () => SetLocked(true)),
+            MakeButton("Notes…", ShowNotes),
             Row(MakeButton("A−", () => ChangeFont(-2)), MakeButton("A+", () => ChangeFont(+2))),
             Row(new TextBlock { Text = "Transpose", VerticalAlignment = VerticalAlignment.Center },
                 MakeButton("−", () => ChangeTranspose(-1)), _transposeText, MakeButton("+", () => ChangeTranspose(+1))),
@@ -541,6 +560,9 @@ internal sealed class StageView : UserControl
                 break;
             case "tuner":
                 ShowTuner();
+                break;
+            case "notes":
+                ShowNotes();
                 break;
             case "lock":
                 SetLocked(true);
@@ -755,6 +777,7 @@ internal sealed class StageView : UserControl
             TransposeBy = shift => Avalonia.Threading.Dispatcher.UIThread.Post(() => ChangeTranspose(shift)),
             Tuning = SongTuning.Note(CurrentInstrument, PlayerInstrument, TuningOffset),
             TuningOffset = TuningOffset,
+            StageNotes = _songSettings.Notes,
         });
         _content.Child = _renderer.Render(_song);
         _smart.InvalidateTimeline();

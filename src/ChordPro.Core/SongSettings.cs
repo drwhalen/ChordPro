@@ -23,6 +23,11 @@ public sealed class SongSettings
     public string? Tuning { get; set; }
     /// <summary>Semitones this song is tuned down or up (−1 for a half step down); null to follow the song's <c>{x_tuning}</c>.</summary>
     public int? TuningOffset { get; set; }
+    /// <summary>
+    /// The player's notes for performing the song ("Drop the 2nd verse", "Long intro"), shown above it and
+    /// kept out of the song file, so they never change the song itself.
+    /// </summary>
+    public string? Notes { get; set; }
     /// <summary>When these settings last changed (UTC), so two devices sharing a library keep the newer ones.</summary>
     public DateTime? Modified { get; set; }
 
@@ -39,6 +44,7 @@ public sealed class SongSettings
         FitsVoice = other.FitsVoice;
         Tuning = other.Tuning;
         TuningOffset = other.TuningOffset;
+        Notes = other.Notes;
         Modified = other.Modified;
     }
 }

@@ -74,7 +74,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   `SetlistView` (a setlist's songs and sets with running times; tapping one starts a gig), `GigView` (the gig:
   played/skipped/requests, Edit to move and skip, the set clock, End gig), `RequestView`, `GigLogView` (finished gigs), `StageView` (▶, Scroll ▾ with
   Manual/Timed/Musical, speed or tempo and tap tempo, half-page turns and the pedal set-up, Chords ▾ with diagrams, easy chords, numbers, instrument,
-  the song's tuning, capo and capo suggestions, and the tuner; Aa ▾ with Lock the stage (Hold to unlock), text size, transpose and theme; chord popups;
+  the song's tuning, capo and capo suggestions, and the tuner; Aa ▾ with Lock the stage (Hold to unlock), Notes… (`NotesView`), text size, transpose and theme; chord popups;
   tap/pedal paging; per-song settings shared with the Mac; in a gig, Previous / Next with the
   next song's key and the set clock, and a pedal press at either end of a song moves to the next or previous song), `LibraryAccess` (Files folder picker,
   security-scoped bookmark, `LibraryMirror` refresh into Application Support, asks iCloud to download
@@ -83,7 +83,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   Debug builds read `CHORDPRO_LIVE_LIBRARY` (a library folder on the Mac, instead of the picker) and
   `CHORDPRO_LIVE_OPEN` (opens a song by title), `CHORDPRO_LIVE_SETLIST` (opens a setlist by name) and
   `CHORDPRO_LIVE_SETLIST_SONG` (plays its entry at that index), `CHORDPRO_LIVE_SCROLL` (starts scrolling
-  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `scroll`, `tuner`, `lock` or `chord:G`) and `CHORDPRO_LIVE_TUNER=test` (a test tone
+  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `scroll`, `tuner`, `notes`, `lock` or `chord:G`) and `CHORDPRO_LIVE_TUNER=test` (a test tone
   instead of the microphone), `CHORDPRO_LIVE_GIG` (`request`, `edit` or `log`, on a gig resumed at launch), passed as `SIMCTL_CHILD_…` to `simctl launch`. It suppresses IL2037/IL2104,
   which come from Avalonia's own iOS and designer assemblies.
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
@@ -97,7 +97,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   expressions, `GeneratedRegex`, XML doc comments on public members, comments that explain *why*.
 - Custom ChordPro directives use the `x_` prefix (`{x_bars}`, `{x_time}`) so other ChordPro apps ignore
   them; section attributes use `key="value"` (`bars="16"`). Unknown directives are ignored, not errors.
-- Per-song state (transpose, capo, font size, scroll mode/speed/tempo, plays, My key, tuning) for songs in
+- Per-song state (transpose, capo, font size, scroll mode/speed/tempo, plays, My key, tuning, stage notes) for songs in
   the library lives in the library's own `.chordpro-viewer.json` (`LibrarySongSettings`), keyed by
   library-relative path with `/`, so the Mac and iOS apps share it through iCloud; saves merge song by
   song, newest `Modified` winning. Songs outside the library stay in `AppSettings.Songs` by full path, and

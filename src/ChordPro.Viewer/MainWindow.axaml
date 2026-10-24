@@ -83,6 +83,15 @@
                     <TextBlock x:Name="ShownKeyText" Classes="label" ToolTip.Tip="The key you're playing in (the file itself isn't changed)" />
                     <ToggleButton x:Name="FitsVoiceToggle" Content="My key" Click="OnFitsVoiceClick"
                                   ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
+                    <Button x:Name="StageNotesButton" Content="Notes" IsEnabled="False"
+                            ToolTip.Tip="Your notes for playing this song, shown above it here and on the iPad (they're not saved in the song file)">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnStageNotesOpening" Closed="OnStageNotesClosed">
+                                <TextBox x:Name="StageNotesBox" AcceptsReturn="True" TextWrapping="Wrap" Width="340" Height="150"
+                                         Watermark="Drop the 2nd verse · Long intro · Watch the key change" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="label" Text="Capo" />

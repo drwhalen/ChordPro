@@ -59,6 +59,8 @@ public sealed record RenderOptions
     public string? Tuning { get; init; }
     /// <summary>Semitones the song is tuned from standard (−1 for a half step down): like a capo, it moves the key you hear, not the shapes.</summary>
     public int TuningOffset { get; init; }
+    /// <summary>The player's notes for the song (<see cref="SongSettings.Notes"/>), shown under its header.</summary>
+    public string? StageNotes { get; init; }
 }
 
 /// <summary>Builds a read-only visual tree for a <see cref="Song"/>.</summary>
@@ -202,6 +204,12 @@ public sealed partial class SongRenderer(RenderOptions options)
             details.Add($"Time: {time}");
         if (details.Count > 0)
             header.Children.Add(Text(string.Join("   ·   ", details), FontSize * 0.9, muted: true, wrap: true));
+        if (!string.IsNullOrWhiteSpace(options.StageNotes))
+        {
+            var notes = Callout(Text(options.StageNotes.Trim(), FontSize * 0.95, wrap: true));
+            notes.Margin = new Thickness(0, FontSize * 0.4, 0, 0);
+            header.Children.Add(notes);
+        }
 
         return header;
     }

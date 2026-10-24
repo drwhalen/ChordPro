@@ -56,6 +56,7 @@ two lines on each side; and the title, chord diagrams and comment-only lead-ins 
 what follows them.
 
 It also:
+- **Notes** for each song ("Drop the 2nd verse", "Long intro"), shown above it and on the iPad, never written into the song file (and left out of PDFs);
 - remembers transpose, capo, text size and scroll speed for each song, plus your library, setlist and view options. For songs in the library these are kept in a hidden `.chordpro-viewer.json` in the library folder, so they travel with the library to other devices (through iCloud Drive or Dropbox); when two devices change settings before syncing, each song keeps its newer change;
 - reloads the song when it is saved in another editor, keeping your place;
 - opens songs, setlists or a library folder dropped onto the window.

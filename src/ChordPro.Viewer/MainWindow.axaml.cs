@@ -282,7 +282,12 @@ public partial class MainWindow : Window
             return;
 
         _renderedColumns = _stageMode && Bounds.Width >= TwoColumnMinWidth && AllowsColumns ? 2 : 1;
-        _renderer = new SongRenderer(CurrentRenderOptions() with { Columns = _renderedColumns });
+        _renderer = new SongRenderer(CurrentRenderOptions() with
+        {
+            Columns = _renderedColumns,
+            // Notes are for playing, not printing, so they're shown here but left out of PDFs.
+            StageNotes = _path is null ? null : _settings.SettingsOf(_path)?.Notes,
+        });
         SongHost.Content = _renderer.Render(_song);
         _scroller.InvalidateTimeline();
     }
@@ -535,6 +540,23 @@ public partial class MainWindow : Window
         StatusText.Text = shape is null ? $"Back to the usual {chord}" : $"Saved this {chord} fingering in the song";
     }
 
+    private void OnStageNotesOpening(object? sender, EventArgs e) =>
+        StageNotesBox.Text = _path is null ? "" : _settings.SettingsOf(_path)?.Notes ?? "";
+
+    // Saved when the notes are put away, then shown above the song.
+    private void OnStageNotesClosed(object? sender, EventArgs e)
+    {
+        if (_path is null)
+            return;
+        var notes = string.IsNullOrWhiteSpace(StageNotesBox.Text) ? null : StageNotesBox.Text.Trim();
+        if (notes == _settings.SettingsOf(_path)?.Notes)
+            return;
+        _settings.ForSong(_path).Notes = notes;
+        _settings.Save();
+        UpdateSongControls();
+        RenderSong();
+    }
+
     private void OnCapoSuggestOpening(object? sender, EventArgs e)
     {
         CapoSuggestions.Children.Clear();
@@ -589,6 +611,8 @@ public partial class MainWindow : Window
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
         FitsVoiceToggle.IsChecked = _path is not null && _settings.SettingsOf(_path)?.FitsVoice == true;
+        StageNotesButton.IsEnabled = _path is not null;
+        StageNotesButton.Content = _path is not null && !string.IsNullOrWhiteSpace(_settings.SettingsOf(_path)?.Notes) ? "Notes •" : "Notes";
         RefreshSongTuningChoices();
         UpdateScrollControls();
     }
