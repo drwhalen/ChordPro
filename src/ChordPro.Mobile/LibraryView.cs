@@ -11,6 +11,9 @@ namespace ChordPro.Mobile;
 /// <summary>A heading in the song list when it's grouped ("Pink Floyd · 6").</summary>
 internal sealed record GroupHeading(string Name, int Count);
 
+/// <summary>The gig being played, at the top of the setlists.</summary>
+internal sealed record CurrentGig(Gig Gig);
+
 /// <summary>A setlist in the library, with how long it runs.</summary>
 internal sealed record SetlistSummary(string Path, string Name, Setlist Setlist, SetLength Length);
 
@@ -31,9 +34,12 @@ internal sealed class LibraryView : UserControl
     private bool _showingSetlists;
     private List<SongInfo> _songs = [];
     private List<SetlistSummary> _setlists = [];
+    private Gig? _currentGig;
+    private List<GigLogEntry> _gigLog = [];
     private SongPalette _palette = SongPalette.Print;
 
-    public LibraryView(MobileSettings settings, Func<Task> chooseLibrary, Action<SongInfo> open, Action<SetlistSummary> openSetlist)
+    public LibraryView(MobileSettings settings, Func<Task> chooseLibrary, Action<SongInfo> open, Action<SetlistSummary> openSetlist,
+        Action openGig, Action<GigLogEntry> openLog)
     {
         _settings = settings;
         _songsTab.Click += (_, _) => ShowTab(setlists: false);
@@ -70,6 +76,8 @@ internal sealed class LibraryView : UserControl
             },
             SongInfo song => SongRow(song),
             SetlistSummary setlist => Row(setlist.Name, setlist.Length.ToString()),
+            CurrentGig current => Row($"▶\uFE0E {current.Gig.Name}", $"Playing now · started {current.Gig.Started.ToLocalTime():h:mm tt}"),
+            GigLogEntry log => Row(log.Gig.Name, log.Summary),
             _ => new Control(),
         });
         // A tap, not a selection: scrolling the list mustn't open songs.
@@ -79,6 +87,8 @@ internal sealed class LibraryView : UserControl
             {
                 case SongInfo song: open(song); break;
                 case SetlistSummary setlist: openSetlist(setlist); break;
+                case CurrentGig: openGig(); break;
+                case GigLogEntry log: openLog(log); break;
             }
         };
 
@@ -96,6 +106,14 @@ internal sealed class LibraryView : UserControl
     {
         _songs = songs;
         _setlists = setlists;
+        ShowItems();
+    }
+
+    /// <summary>The gig being played (or null) and finished gigs, newest first, shown with the setlists.</summary>
+    public void SetGigs(Gig? current, List<GigLogEntry> log)
+    {
+        _currentGig = current;
+        _gigLog = log;
         ShowItems();
     }
 
@@ -155,8 +173,19 @@ internal sealed class LibraryView : UserControl
         _setlistsTab.Foreground = _showingSetlists ? _palette.Text : _palette.MutedText;
         if (_showingSetlists)
         {
-            _list.ItemsSource = _setlists.Where(s => string.IsNullOrWhiteSpace(_search.Text) ||
-                s.Name.Contains(_search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)).ToList();
+            bool Matches(string name) => string.IsNullOrWhiteSpace(_search.Text) ||
+                name.Contains(_search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase);
+            List<object> setlistItems = [];
+            if (_currentGig is { } gig)
+                setlistItems.Add(new CurrentGig(gig));
+            setlistItems.AddRange(_setlists.Where(s => Matches(s.Name)));
+            var log = _gigLog.Where(g => Matches(g.Gig.Name)).ToList();
+            if (log.Count > 0)
+            {
+                setlistItems.Add(new GroupHeading("Gig log", log.Count));
+                setlistItems.AddRange(log);
+            }
+            _list.ItemsSource = setlistItems;
             return;
         }
         var songs = SongLibrary.Filter(_songs, _search.Text);

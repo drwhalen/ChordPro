@@ -14,6 +14,12 @@ internal static class AppFolders
     /// <summary>The device's own copy of the library, read on stage (see <see cref="Core.LibraryMirror"/>).</summary>
     public static string LibraryCopy => Path.Combine(Support, "Library");
 
+    /// <summary>The gig being played, kept after every change so it survives iOS closing the app mid-set.</summary>
+    public static string CurrentGig => Path.Combine(Support, "Gig.json");
+
+    /// <summary>Finished gigs, one file each.</summary>
+    public static string GigLog => Path.Combine(Support, "Gigs");
+
     /// <summary>The bundled sample songs, shown until a library is chosen.</summary>
     public static string Samples => Path.Combine(Support, "Samples");
 }

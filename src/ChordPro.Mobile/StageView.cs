@@ -14,10 +14,11 @@ using ChordPro.UI;
 
 namespace ChordPro.Mobile;
 
-/// <summary>Where a song is in the setlist being played: the songs either side, and how to step to them.</summary>
+/// <summary>Where a song is in the gig being played: the songs either side, how to step to them, and the set clock.</summary>
 /// <param name="Next">"Set 2 · Bike (A)", or null at the end of the setlist.</param>
 /// <param name="HasPrevious">False on the first song.</param>
-internal sealed record SetlistPlace(string? Next, bool HasPrevious, Action<int> Step);
+/// <param name="Clock">"9:41 · Set 1 · 18 min · 4 min over", asked for every few seconds.</param>
+internal sealed record SetlistPlace(string? Next, bool HasPrevious, Action<int> Step, Func<string> Clock);
 
 /// <summary>
 /// A song on stage: paged by taps or a pedal, or scrolled (timed to its length, or musically by its tempo
@@ -70,6 +71,8 @@ internal sealed class StageView : UserControl
     private readonly double _deviceFontSize =
         UIKit.UIDevice.CurrentDevice.UserInterfaceIdiom == UIKit.UIUserInterfaceIdiom.Phone ? 17 : 22;
     private readonly TapTempo _taps = new();
+    private readonly TextBlock _clock = new() { FontSize = 14, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly Avalonia.Threading.DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Stopwatch _tapClock = Stopwatch.StartNew();
     private SongRenderer? _renderer;
     private int _columns = 1;
@@ -134,6 +137,10 @@ internal sealed class StageView : UserControl
             var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
             if (place.HasPrevious)
                 footer.Children.Add(MakeButton("‹ Previous", () => place.Step(-1)));
+            Grid.SetColumn(_clock, 1);
+            footer.Children.Add(_clock);
+            _clock.Text = place.Clock();
+            _clockTimer.Tick += (_, _) => _clock.Text = place.Clock();
             if (place.Next is { } next)
             {
                 var nextButton = MakeButton($"Next: {next}  ›", () => place.Step(+1));
@@ -470,6 +477,8 @@ internal sealed class StageView : UserControl
         base.OnAttachedToVisualTree(e);
         Render();
         Focus();
+        if (_place is not null)
+            _clockTimer.Start();
 #if DEBUG
         // For simulator checks: scroll in a mode as soon as the song is laid out (SIMCTL_CHILD_CHORDPRO_LIVE_SCROLL=Musical).
         if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SCROLL") is { } name && Enum.TryParse<ScrollMode>(name, out var mode))
@@ -501,6 +510,7 @@ internal sealed class StageView : UserControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _smart.Stop();
+        _clockTimer.Stop();
         base.OnDetachedFromVisualTree(e);
     }
 
@@ -549,7 +559,7 @@ internal sealed class StageView : UserControl
         Background = _scroller.Background = palette.Background;
         _bar.Background = _footer.Background = palette.CommentBackground;
         _readingMarker.Background = palette.Chord;
-        _scrollHint.Foreground = palette.MutedText;
+        _scrollHint.Foreground = _clock.Foreground = palette.MutedText;
         var transpose = _songSettings.Transpose;
         _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
         _columns = ColumnsFor(Bounds.Width);
