@@ -540,8 +540,12 @@ public partial class MainWindow : Window
         StatusText.Text = shape is null ? $"Back to the usual {chord}" : $"Saved this {chord} fingering in the song";
     }
 
-    private void OnStageNotesOpening(object? sender, EventArgs e) =>
+    // Song ▾: transpose and capo (with the easiest capo positions), My key and the notes.
+    private void OnSongMenuOpening(object? sender, EventArgs e)
+    {
         StageNotesBox.Text = _path is null ? "" : _settings.SettingsOf(_path)?.Notes ?? "";
+        FillCapoSuggestions();
+    }
 
     // Saved when the notes are put away, then shown above the song.
     private void OnStageNotesClosed(object? sender, EventArgs e)
@@ -557,7 +561,7 @@ public partial class MainWindow : Window
         RenderSong();
     }
 
-    private void OnCapoSuggestOpening(object? sender, EventArgs e)
+    private void FillCapoSuggestions()
     {
         CapoSuggestions.Children.Clear();
         if (_song is null)
@@ -566,36 +570,32 @@ public partial class MainWindow : Window
         var choices = CapoSuggester.ForSong(_song, _transpose, _settings.KeyIncludesCapo, TuningOffset, _settings.SimplifyChords, CurrentInstrument);
         if (choices.Count == 0)
         {
-            CapoSuggestions.Children.Add(new TextBlock { Text = "This song has no chords." });
+            CapoSuggestions.Children.Add(new TextBlock { Text = "This song has no chords.", Margin = new Thickness(12, 10) });
             return;
         }
 
         var current = _capo ?? DefaultCapo;
-        CapoSuggestions.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 4) });
-
+        // A row each, the one in use checked; choosing one keeps the menu open to show the change.
         foreach (var choice in choices)
         {
-            var title = choice.Capo == current ? $"{choice.Title}  (current)" : choice.Title;
-
-            var button = new Button
+            if (CapoSuggestions.Children.Count > 0)
+                CapoSuggestions.Children.Add(new Border { Classes = { "separator" } });
+            var content = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            content.Children.Add(new StackPanel
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Content = new StackPanel
+                Spacing = 1,
+                Children =
                 {
-                    Children =
-                    {
-                        new TextBlock { Text = title, FontWeight = FontWeight.SemiBold },
-                        new TextBlock { Text = choice.Detail, Opacity = 0.75, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
-                    },
+                    new TextBlock { Text = choice.Title, FontWeight = FontWeight.SemiBold },
+                    new TextBlock { Text = choice.Detail, Opacity = 0.7, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.WordEllipsis },
                 },
-            };
+            });
+            var check = new TextBlock { Text = choice.Capo == current ? "✓" : "", Width = 24, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(check, 1);
+            content.Children.Add(check);
+            var button = new Button { Content = content, Classes = { "row" } };
             var capo = choice.Capo;
-            button.Click += (_, _) =>
-            {
-                CapoSuggestButton.Flyout?.Hide();
-                SetCapo(capo);
-            };
+            button.Click += (_, _) => SetCapo(capo);
             CapoSuggestions.Children.Add(button);
         }
     }
@@ -611,8 +611,9 @@ public partial class MainWindow : Window
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
         FitsVoiceToggle.IsChecked = _path is not null && _settings.SettingsOf(_path)?.FitsVoice == true;
-        StageNotesButton.IsEnabled = _path is not null;
-        StageNotesButton.Content = _path is not null && !string.IsNullOrWhiteSpace(_settings.SettingsOf(_path)?.Notes) ? "Notes •" : "Notes";
+        SongButton.IsEnabled = _path is not null;
+        if (SongButton.Flyout?.IsOpen == true)
+            FillCapoSuggestions(); // a new key or capo changes them
         RefreshSongTuningChoices();
         UpdateScrollControls();
     }
@@ -968,6 +969,9 @@ public partial class MainWindow : Window
             ? $"Following your voice needs a one-time download of the speech model ({SpeechModel.ApproximateBytes / 1e6:0} MB). After that it works offline."
             : "Start or stop (Space)");
 
+        // The menu button names the mode, so it doesn't read as a second Scroll button beside ▶ Scroll.
+        ScrollButton.Content = $"{(ScrollModeBox.SelectedItem as ComboBoxItem)?.Content} ▾";
+        SpeedLabel.Text = timed ? "Speed" : "Tempo";
         SpeedText.Text = timed ? $"{_speed:0.0}×" : $"{CurrentTempo:0} BPM";
         ToolTip.SetTip(SlowerButton, timed ? "Scroll slower" : "Lower tempo");
         ToolTip.SetTip(FasterButton, timed ? "Scroll faster" : "Raise tempo");
@@ -1138,14 +1142,14 @@ public partial class MainWindow : Window
         ToolTip.SetTip(newButton, "Start a new theme from the current one");
         newButton.Click += async (_, _) =>
         {
-            ThemeButton.Flyout?.Hide();
+            ViewButton.Flyout?.Hide();
             await EditThemeAsync(CurrentTheme.Clone(UniqueThemeName($"{CurrentTheme.Name} (custom)")), isNew: true);
         };
         var editButton = new Button { Content = "Edit…", IsEnabled = !UsingSystemTheme && !CurrentTheme.IsBuiltIn };
         ToolTip.SetTip(editButton, "Edit the current theme (built-in themes can be copied with New theme…)");
         editButton.Click += async (_, _) =>
         {
-            ThemeButton.Flyout?.Hide();
+            ViewButton.Flyout?.Hide();
             await EditThemeAsync(CurrentTheme, isNew: false);
         };
         buttons.Children.Add(newButton);
@@ -1226,6 +1230,7 @@ public partial class MainWindow : Window
         Grid.SetRow(Body, on ? 0 : 1);
         Grid.SetRowSpan(Body, on ? 2 : 1);
         StageToolbarHandle.IsVisible = on;
+        StatusBar.IsVisible = !on;
         _stageToolbarTimer.Stop();
         if (on)
         {

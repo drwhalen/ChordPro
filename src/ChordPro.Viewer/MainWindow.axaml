@@ -9,10 +9,104 @@
         DragDrop.AllowDrop="True">
     <Window.Styles>
         <Style Selector="WrapPanel.toolbar > StackPanel">
-            <Setter Property="Margin" Value="0,3,18,3" />
+            <Setter Property="Margin" Value="0,2" />
         </Style>
         <Style Selector="WrapPanel.toolbar > StackPanel > :is(Control)">
             <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- A thin line between the toolbar's groups. -->
+        <Style Selector="Border.divider">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="12,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </Style>
+
+        <!-- The toolbar's menus, laid out like macOS System Settings: a title, then rounded cards of rows
+             (label on the left, control on the right), with small headings above and notes below. -->
+        <Style Selector="FlyoutPresenter.menu">
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="CornerRadius" Value="12" />
+        </Style>
+        <Style Selector="StackPanel.menu">
+            <Setter Property="Width" Value="360" />
+            <Setter Property="Spacing" Value="6" />
+        </Style>
+        <Style Selector="StackPanel.menu > TextBlock.title">
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="4,0,0,4" />
+        </Style>
+        <Style Selector="StackPanel.menu > TextBlock.heading">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="12,10,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </Style>
+        <Style Selector="StackPanel.menu > TextBlock.note">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="12,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}" />
+        </Style>
+        <Style Selector="Border.separator">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="12,0,0,0" />
+            <Setter Property="Opacity" Value="0.6" />
+            <Setter Property="Background" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        </Style>
+        <Style Selector="Grid.row">
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Margin" Value="12,0,8,0" />
+        </Style>
+        <Style Selector="Grid.row > :is(Control)">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Grid.row ToggleSwitch">
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Margin" Value="0,0,-8,0" />
+        </Style>
+        <Style Selector="Grid.row ComboBox">
+            <Setter Property="MaxWidth" Value="210" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+        </Style>
+        <Style Selector="Button.step">
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.page">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="MinHeight" Value="32" />
+        </Style>
+        <Style Selector="Button.reset:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.reset">
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!-- A whole row that does something when clicked (the card is its background). -->
+        <Style Selector="Button.row">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Padding" Value="12,6" />
         </Style>
         <Style Selector="TextBlock.label">
             <Setter Property="Opacity" Value="0.6" />
@@ -58,115 +152,222 @@
     </Window.DataTemplates>
 
     <!-- In stage mode the body spans both rows, so the toolbar floats over the chart instead of pushing it down. -->
-    <Grid RowDefinitions="Auto,*">
-        <Border x:Name="Toolbar" Grid.Row="0" ZIndex="1" Padding="12,5"
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border x:Name="Toolbar" Grid.Row="0" ZIndex="1" Padding="12,6"
                 BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-            <WrapPanel Classes="toolbar">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <ToggleButton x:Name="SidebarToggle" Content="Songs" Click="OnSidebarToggleClick" ToolTip.Tip="Show or hide the song list" />
-                    <Button Content="Open…" Click="OnOpenClick" />
-                    <Button Content="PDF…" Click="OnExportPdfClick" ToolTip.Tip="Save as PDF to print or share" />
+            <Grid ColumnDefinitions="*,Auto">
+                <WrapPanel Classes="toolbar">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ToggleButton x:Name="SidebarToggle" Content="Songs" Click="OnSidebarToggleClick" ToolTip.Tip="Show or hide the song list" />
+                        <Button Content="Open…" Click="OnOpenClick" ToolTip.Tip="Open a song file" />
+                    </StackPanel>
+                    <Border Classes="divider" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Start or stop (Space)" />
+                        <Button x:Name="ScrollButton" Content="Manual ▾" ToolTip.Tip="How this song scrolls: by hand, timed, musically or following you">
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedLeft" FlyoutPresenterClasses="menu">
+                                    <StackPanel Classes="menu">
+                                        <TextBlock Classes="title" Text="Scrolling" />
+                                        <Border Classes="card">
+                                            <StackPanel>
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Mode" />
+                                                    <ComboBox x:Name="ScrollModeBox" Grid.Column="1" SelectionChanged="OnScrollModeChanged"
+                                                              ToolTip.Tip="How this song scrolls (remembered per song)">
+                                                        <ComboBoxItem Content="Manual" ToolTip.Tip="Tap, swipe, keys or foot pedal" />
+                                                        <ComboBoxItem Content="Timed" ToolTip.Tip="Paced by {duration} or {x_time} markers" />
+                                                        <ComboBoxItem Content="Musical" ToolTip.Tip="Paced by tempo and bars, line by line" />
+                                                        <ComboBoxItem Content="Follow audio (beta)" ToolTip.Tip="Listens to you play and follows your tempo (experimental)" />
+                                                        <ComboBoxItem Content="Follow voice (beta)" ToolTip.Tip="Listens to you sing and keeps your place by the lyrics (experimental; recognition runs on this computer)" />
+                                                    </ComboBox>
+                                                </Grid>
+                                                <Border Classes="separator" IsVisible="{Binding #SpeedRow.IsVisible}" />
+                                                <Grid x:Name="SpeedRow" Classes="row" ColumnDefinitions="*,Auto" IsVisible="{Binding #SpeedText.IsVisible}">
+                                                    <TextBlock x:Name="SpeedLabel" Text="Speed" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="64" TextAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                        <Button x:Name="SlowerButton" Classes="step" Content="−" Click="OnScrollSlowerClick" />
+                                                        <Button x:Name="FasterButton" Classes="step" Content="+" Click="OnScrollFasterClick" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <Border Classes="separator" IsVisible="{Binding #TapTempoButton.IsVisible}" />
+                                                <Button x:Name="TapTempoButton" Classes="row" Click="OnTapTempoClick"
+                                                        ToolTip.Tip="Tap along with the beat to set the tempo (remembered for this song)">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="Tap tempo" />
+                                                        <TextBlock Grid.Column="1" Classes="muted" Text="♩" />
+                                                    </Grid>
+                                                </Button>
+                                                <Border Classes="separator" IsVisible="{Binding #TrainVoiceButton.IsVisible}" />
+                                                <Button x:Name="TrainVoiceButton" Classes="row" Click="OnTrainVoiceClick" IsVisible="False"
+                                                        ToolTip.Tip="Train Follow voice to your voice and microphone: sing this song once and it finds the settings that follow you best">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="Train to my voice…" />
+                                                        <TextBlock Grid.Column="1" Classes="muted" Text="›" />
+                                                    </Grid>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="note" Text="Space starts and stops. Page Up and Page Down, the arrow keys or a click at the top or bottom of the song turn pages." />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button x:Name="PageUpButton" Classes="page" Content="▲" Click="OnPageUpClick" ToolTip.Tip="Page up (Page Up, Shift+Space, or click the top of the song)" />
+                        <Button x:Name="PageDownButton" Classes="page" Content="▼" Click="OnPageDownClick" ToolTip.Tip="Page down (Page Down, Space, or click the bottom of the song)" />
+                    </StackPanel>
+                    <Border Classes="divider" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button x:Name="SongButton" IsEnabled="False" ToolTip.Tip="Transpose, capo, My key and notes for this song">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Song" />
+                                <TextBlock x:Name="ShownKeyText" Classes="muted" />
+                                <TextBlock Text="▾" />
+                            </StackPanel>
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedLeft" FlyoutPresenterClasses="menu" Opening="OnSongMenuOpening" Closed="OnStageNotesClosed">
+                                    <StackPanel Classes="menu">
+                                        <TextBlock Classes="title" Text="This song" />
+                                        <Border Classes="card">
+                                            <StackPanel>
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Transpose" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                        <Button x:Name="TransposeResetButton" Classes="reset" Content="0" IsEnabled="False"
+                                                                Click="OnTransposeResetClick" ToolTip.Tip="Back to the original key" />
+                                                        <Button Classes="step" Content="−" Click="OnTransposeDownClick" ToolTip.Tip="Transpose down a semitone" />
+                                                        <Button Classes="step" Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Capo" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                        <Button x:Name="CapoResetButton" Classes="reset" Content="0" IsEnabled="False"
+                                                                Click="OnCapoResetClick" ToolTip.Tip="Back to the song's capo" />
+                                                        <Button Classes="step" Content="−" Click="OnCapoDownClick" ToolTip.Tip="Capo one fret lower" />
+                                                        <Button Classes="step" Content="+" Click="OnCapoUpClick" ToolTip.Tip="Capo one fret higher (chords change, pitch stays)" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="My key" />
+                                                    <ToggleSwitch x:Name="FitsVoiceToggle" Grid.Column="1" Click="OnFitsVoiceClick"
+                                                                  ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="note" Text="My key: this key sits well for your voice. Suggest a set learns your range from it." />
+                                        <TextBlock Classes="heading" Text="EASIEST CAPO POSITIONS" />
+                                        <Border Classes="card">
+                                            <StackPanel x:Name="CapoSuggestions" />
+                                        </Border>
+                                        <TextBlock Classes="note" Text="The song sounds the same with each." />
+                                        <TextBlock Classes="heading" Text="NOTES" />
+                                        <TextBox x:Name="StageNotesBox" AcceptsReturn="True" TextWrapping="Wrap" Height="96"
+                                                 Watermark="Drop the 2nd verse · Long intro · Watch the key change" />
+                                        <TextBlock Classes="note" Text="Shown above the song here and on the iPad; not saved in the song file." />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button x:Name="ViewButton" Content="View ▾" ToolTip.Tip="Chords, diagrams, text size and theme">
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedLeft" FlyoutPresenterClasses="menu" Opening="OnThemeFlyoutOpening">
+                                    <StackPanel Classes="menu">
+                                        <TextBlock Classes="title" Text="View" />
+                                        <Border Classes="card">
+                                            <StackPanel>
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Text size" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                        <Button Classes="step" Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />
+                                                        <Button Classes="step" Content="A+" Click="OnZoomInClick" ToolTip.Tip="Larger text" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="heading" Text="CHORDS" />
+                                        <Border Classes="card">
+                                            <StackPanel>
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Show chords" />
+                                                    <ToggleSwitch x:Name="ShowChordsCheck" Grid.Column="1" IsCheckedChanged="OnViewOptionChanged" />
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="Chord diagrams" />
+                                                    <ToggleSwitch x:Name="ShowDiagramsCheck" Grid.Column="1" IsCheckedChanged="OnViewOptionChanged" />
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto" ToolTip.Tip="Show chords as Nashville numbers in their key (5⁷ for G7 in C), so the song can be called in any key. Click one to see its chord.">
+                                                    <TextBlock Text="Chord numbers (1 4 5)" />
+                                                    <ToggleSwitch x:Name="ChordNumbersCheck" Grid.Column="1" IsCheckedChanged="OnViewOptionChanged" />
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto" ToolTip.Tip="Show simpler chords: Cmaj9 → C, Am7 → Am, G/B → G, F#m7b5 → F#m">
+                                                    <TextBlock Text="Easy chords" />
+                                                    <ToggleSwitch x:Name="SimplifyChordsCheck" Grid.Column="1" IsCheckedChanged="OnViewOptionChanged" />
+                                                </Grid>
+                                                <Border Classes="separator" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto" ToolTip.Tip="Dulcimer and Merlin diagrams use their diatonic frets (with 6+), written as tab: 0-1-3">
+                                                    <TextBlock Text="Diagrams for" />
+                                                    <ComboBox x:Name="InstrumentBox" Grid.Column="1" SelectionChanged="OnViewOptionChanged" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock x:Name="SongTuningLabel" Classes="heading" Text="THIS SONG'S TUNING" />
+                                        <Border Classes="card" IsVisible="{Binding #SongTuningLabel.IsVisible}">
+                                            <StackPanel>
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto" IsVisible="{Binding #SongTuningBox.IsVisible}"
+                                                      ToolTip.Tip="A tuning for this song only (a song can also give one with {meta: tuning Drop D})">
+                                                    <TextBlock Text="Tuning" />
+                                                    <ComboBox x:Name="SongTuningBox" Grid.Column="1" SelectionChanged="OnSongTuningChanged" />
+                                                </Grid>
+                                                <Border Classes="separator" IsVisible="{Binding #SongTuningBox.IsVisible}" />
+                                                <Grid Classes="row" ColumnDefinitions="*,Auto" ToolTip.Tip="Tuned down for this song: the chords are fingered as written, and the tuner targets the lower strings">
+                                                    <TextBlock Text="Pitch" />
+                                                    <ComboBox x:Name="SongPitchBox" Grid.Column="1" SelectionChanged="OnSongTuningChanged">
+                                                        <ComboBoxItem Content="Standard" />
+                                                        <ComboBoxItem Content="Half step down" />
+                                                        <ComboBoxItem Content="Whole step down" />
+                                                    </ComboBox>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="heading" Text="THEME" />
+                                        <Border Classes="card">
+                                            <StackPanel x:Name="ThemeMenu" Margin="12,8" Spacing="2" />
+                                        </Border>
+                                        <TextBlock Classes="heading" Text="LIBRARY" />
+                                        <Border Classes="card">
+                                            <Grid Classes="row" ColumnDefinitions="*,Auto">
+                                                <TextBlock Text="Song keys include the capo" />
+                                                <ToggleSwitch x:Name="KeyIncludesCapoCheck" Grid.Column="1" IsCheckedChanged="OnViewOptionChanged" />
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock Classes="note" Text="On when {key} is the key you hear with the capo on, as LivePrompter charts are written. Off follows ChordPro: the key of the chords as written." />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+                </WrapPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <ToggleButton x:Name="EditToggle" Content="Edit" Click="OnEditToggleClick" ToolTip.Tip="Edit the song's text, with a live preview (⌘/Ctrl+E)" />
                     <Button Content="Tuner" Click="OnTunerClick" ToolTip.Tip="Tune your instrument with the microphone (⌘/Ctrl+T)" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Button Content="A−" Click="OnZoomOutClick" ToolTip.Tip="Smaller text" />
-                    <Button Content="A+" Click="OnZoomInClick" ToolTip.Tip="Larger text" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Classes="label" Text="Transpose" />
-                    <Button Content="−" Click="OnTransposeDownClick" ToolTip.Tip="Transpose down a semitone" />
-                    <Button x:Name="TransposeResetButton" Classes="value" Content="0" IsEnabled="False"
-                            Click="OnTransposeResetClick" ToolTip.Tip="Reset to original key" />
-                    <Button Content="+" Click="OnTransposeUpClick" ToolTip.Tip="Transpose up a semitone" />
-                    <TextBlock x:Name="ShownKeyText" Classes="label" ToolTip.Tip="The key you're playing in (the file itself isn't changed)" />
-                    <ToggleButton x:Name="FitsVoiceToggle" Content="My key" Click="OnFitsVoiceClick"
-                                  ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
-                    <Button x:Name="StageNotesButton" Content="Notes" IsEnabled="False"
-                            ToolTip.Tip="Your notes for playing this song, shown above it here and on the iPad (they're not saved in the song file)">
-                        <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnStageNotesOpening" Closed="OnStageNotesClosed">
-                                <TextBox x:Name="StageNotesBox" AcceptsReturn="True" TextWrapping="Wrap" Width="340" Height="150"
-                                         Watermark="Drop the 2nd verse · Long intro · Watch the key change" />
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Classes="label" Text="Capo" />
-                    <Button Content="−" Click="OnCapoDownClick" ToolTip.Tip="Capo one fret lower" />
-                    <Button x:Name="CapoResetButton" Classes="value" Content="0" IsEnabled="False"
-                            Click="OnCapoResetClick" ToolTip.Tip="Reset to the song's capo" />
-                    <Button Content="+" Click="OnCapoUpClick" ToolTip.Tip="Capo one fret higher (chords change, pitch stays)" />
-                    <Button x:Name="CapoSuggestButton" Content="Suggest…" ToolTip.Tip="Find the capo position with the easiest chords">
-                        <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnCapoSuggestOpening">
-                                <StackPanel x:Name="CapoSuggestions" Spacing="4" MinWidth="300" />
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <ComboBox x:Name="ScrollModeBox" MinWidth="120" SelectionChanged="OnScrollModeChanged"
-                              ToolTip.Tip="How this song scrolls (remembered per song)">
-                        <ComboBoxItem Content="Manual" ToolTip.Tip="Tap, swipe, keys or foot pedal" />
-                        <ComboBoxItem Content="Timed" ToolTip.Tip="Paced by {duration} or {x_time} markers" />
-                        <ComboBoxItem Content="Musical" ToolTip.Tip="Paced by tempo and bars, line by line" />
-                        <ComboBoxItem Content="Follow audio (beta)" ToolTip.Tip="Listens to you play and follows your tempo (experimental)" />
-                        <ComboBoxItem Content="Follow voice (beta)" ToolTip.Tip="Listens to you sing and keeps your place by the lyrics (experimental; recognition runs on this computer)" />
-                    </ComboBox>
-                    <ToggleButton x:Name="ScrollToggle" Content="▶ Scroll" Click="OnScrollToggleClick" ToolTip.Tip="Start or stop (Space)" />
-                    <Button x:Name="SlowerButton" Content="−" Click="OnScrollSlowerClick" />
-                    <TextBlock x:Name="SpeedText" Text="1.0×" MinWidth="34" TextAlignment="Center" />
-                    <Button x:Name="FasterButton" Content="+" Click="OnScrollFasterClick" />
-                    <Button x:Name="TrainVoiceButton" Content="Train…" Click="OnTrainVoiceClick" IsVisible="False"
-                            ToolTip.Tip="Train Follow voice to your voice and microphone: sing this song once and it finds the settings that follow you best" />
-                    <Button x:Name="TapTempoButton" Content="Tap" Click="OnTapTempoClick"
-                            ToolTip.Tip="Tap along with the beat to set the tempo (remembered for this song)" />
-                    <Button x:Name="PageUpButton" Content="▲" Click="OnPageUpClick" ToolTip.Tip="Page up (Page Up, Shift+Space, or tap the top of the song)" />
-                    <Button x:Name="PageDownButton" Content="▼" Click="OnPageDownClick" ToolTip.Tip="Page down (Page Down, Space, or tap the bottom of the song)" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Button Content="View ▾">
-                        <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedLeft">
-                                <StackPanel Spacing="6" MinWidth="180">
-                                    <CheckBox x:Name="ShowChordsCheck" Content="Show chords" IsCheckedChanged="OnViewOptionChanged" />
-                                    <CheckBox x:Name="ShowDiagramsCheck" Content="Chord diagrams" IsCheckedChanged="OnViewOptionChanged" />
-                                <CheckBox x:Name="ChordNumbersCheck" Content="Chord numbers (1 4 5)" IsCheckedChanged="OnViewOptionChanged"
-                                          ToolTip.Tip="Show chords as Nashville numbers in their key (5⁷ for G7 in C), so the song can be called in any key. Tap one to see its chord." />
-                                <CheckBox x:Name="SimplifyChordsCheck" Content="Easy chords" IsCheckedChanged="OnViewOptionChanged"
-                                          ToolTip.Tip="Show simpler chords: Cmaj9 → C, Am7 → Am, G/B → G, F#m7b5 → F#m" />
-                                    <CheckBox x:Name="KeyIncludesCapoCheck" Content="Song keys include the capo" IsCheckedChanged="OnViewOptionChanged"
-                                              ToolTip.Tip="Turn on when {key} is the key you hear with the capo on, as LivePrompter charts are written. Off follows ChordPro: {key} is the key of the chords as written." />
-                                    <TextBlock Classes="label" Text="Diagrams for" Margin="0,6,0,0" />
-                                    <ComboBox x:Name="InstrumentBox" HorizontalAlignment="Stretch" SelectionChanged="OnViewOptionChanged"
-                                              ToolTip.Tip="Dulcimer and Merlin diagrams use their diatonic frets (with 6+), written as tab: 0-1-3" />
-                                    <TextBlock x:Name="SongTuningLabel" Classes="label" Text="This song's tuning" Margin="0,6,0,0" />
-                                    <ComboBox x:Name="SongTuningBox" HorizontalAlignment="Stretch" SelectionChanged="OnSongTuningChanged"
-                                              ToolTip.Tip="A tuning for this song only (a song can also give one with {x_tuning: Drop D})" />
-                                    <ComboBox x:Name="SongPitchBox" HorizontalAlignment="Stretch" SelectionChanged="OnSongTuningChanged"
-                                              ToolTip.Tip="Tuned down for this song: the chords are fingered as written, and the tuner targets the lower strings">
-                                        <ComboBoxItem Content="Standard pitch" />
-                                        <ComboBoxItem Content="Half step down" />
-                                        <ComboBoxItem Content="Whole step down" />
-                                    </ComboBox>
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                    <Button x:Name="ThemeButton" Content="Theme ▾" ToolTip.Tip="Day, night, high-contrast and your own themes">
-                        <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnThemeFlyoutOpening">
-                                <StackPanel x:Name="ThemeMenu" Spacing="4" MinWidth="240" />
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
+                    <Button Content="PDF…" Click="OnExportPdfClick" ToolTip.Tip="Save as PDF to print or share" />
                     <ToggleButton x:Name="StageToggle" Content="Stage" Click="OnStageToggleClick" ToolTip.Tip="Full screen, large text, two columns (Esc to exit)" />
-                    <TextBlock x:Name="StatusText" Classes="label" Margin="6,3,0,3" />
                 </StackPanel>
-            </WrapPanel>
+            </Grid>
+        </Border>
+
+        <!-- What just happened (saved, reloaded…) and, while scrolling, where the song is. -->
+        <Border x:Name="StatusBar" Grid.Row="2" Padding="12,3" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <TextBlock x:Name="StatusText" Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis" />
         </Border>
 
         <DockPanel x:Name="Body" Grid.Row="1">
@@ -177,15 +378,22 @@
                 <TabItem Header="Library" FontSize="15">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
-                            <WrapPanel Classes="buttons">
-                                <Button Content="Choose folder…" Click="OnChooseFolderClick" />
-                                <Button Content="Refresh" Click="OnRefreshLibraryClick" />
-                                <Button Content="New song…" Click="OnNewSongClick"
+                            <Grid ColumnDefinitions="*,6,Auto">
+                                <Button Content="New song…" Click="OnNewSongClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         ToolTip.Tip="Start a new song in the library, ready to write (⌘/Ctrl+N)" />
-                                <Button Content="Check…" Click="OnCheckLibraryClick"
-                                        ToolTip.Tip="Look for problems in the songs and setlists: empty headings, wrong keys, misspelled chords, missing songs" />
-                            </WrapPanel>
-                            <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                <Button Grid.Column="2" Content="⋯" ToolTip.Tip="Library folder, refresh and check">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="Choose library folder…" Click="OnChooseFolderClick" />
+                                            <MenuItem Header="Refresh" Click="OnRefreshLibraryClick" />
+                                            <Separator />
+                                            <MenuItem Header="Check the library…" Click="OnCheckLibraryClick"
+                                                      ToolTip.Tip="Look for problems in the songs and setlists: empty headings, wrong keys, misspelled chords, missing songs" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="LibraryFolderText" Classes="label" FontSize="12" TextTrimming="LeadingCharacterEllipsis" />
                             <TextBox x:Name="SearchBox" Watermark="Search title, artist…" TextChanged="OnSearchChanged" />
                             <ComboBox x:Name="GroupByCombo" HorizontalAlignment="Stretch" SelectionChanged="OnGroupByChanged">
                                 <ComboBoxItem Content="No grouping" />
@@ -218,19 +426,27 @@
                         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
                             <ComboBox x:Name="LibrarySetlistsCombo" PlaceholderText="Setlists in your library…" HorizontalAlignment="Stretch"
                                       SelectionChanged="OnLibrarySetlistChosen" />
-                            <TextBlock x:Name="SetlistNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                            <WrapPanel Classes="buttons">
-                                <Button Content="New" Click="OnNewSetlistClick" />
-                                <Button Content="Open…" Click="OnOpenSetlistClick" />
-                                <Button Content="Save as…" Click="OnSaveSetlistClick" />
-                                <Button Content="PDF…" Click="OnSetlistPdfClick" ToolTip.Tip="The whole setlist as one PDF to print: a list of the songs with key, capo and tempo, then every song" />
-                            </WrapPanel>
-                            <WrapPanel Classes="buttons">
-                                <Button Content="+ Add" Click="OnAddToSetlistClick" ToolTip.Tip="Add the open song" />
-                                <Button Content="Remove" Click="OnRemoveFromSetlistClick" />
-                                <Button Content="↑" Click="OnMoveUpClick" ToolTip.Tip="Move up" />
-                                <Button Content="↓" Click="OnMoveDownClick" ToolTip.Tip="Move down" />
-                            </WrapPanel>
+                            <Grid ColumnDefinitions="*,6,Auto">
+                                <TextBlock x:Name="SetlistNameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <Button Grid.Column="2" Content="⋯" ToolTip.Tip="New, open, save and print setlists">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="New setlist" Click="OnNewSetlistClick" />
+                                            <MenuItem Header="Open…" Click="OnOpenSetlistClick" />
+                                            <MenuItem Header="Save as…" Click="OnSaveSetlistClick" />
+                                            <Separator />
+                                            <MenuItem Header="Print as PDF…" Click="OnSetlistPdfClick"
+                                                      ToolTip.Tip="The whole setlist as one PDF to print: a list of the songs with key, capo and tempo, then every song" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,6,*,6,Auto,6,Auto">
+                                <Button Content="+ Add song" Click="OnAddToSetlistClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Add the open song" />
+                                <Button Grid.Column="2" Content="Remove" Click="OnRemoveFromSetlistClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Remove the selected song" />
+                                <Button Grid.Column="4" Content="↑" Click="OnMoveUpClick" ToolTip.Tip="Move up" />
+                                <Button Grid.Column="6" Content="↓" Click="OnMoveDownClick" ToolTip.Tip="Move down" />
+                            </Grid>
                             <Button Content="Suggest a set…" Click="OnSuggestSetlistClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     ToolTip.Tip="Build a set that flows (keys, tempos, capo) around the songs in this setlist, or see how this one flows" />
                         </StackPanel>
