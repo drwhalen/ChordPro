@@ -53,20 +53,24 @@ internal sealed class StageView : UserControl
     private readonly Border _bar = new() { Padding = new Thickness(8, 6) };
     private readonly Border _footer = new() { Padding = new Thickness(8, 6) };
     private readonly Button _play = new();
-    private readonly TextBlock _transposeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 36, TextAlignment = TextAlignment.Center };
-    private readonly TextBlock _speedText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 72, TextAlignment = TextAlignment.Center };
-    private readonly StackPanel _speedRow = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
-    private readonly TextBlock _scrollHint = new() { FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxWidth = 280 };
-    private readonly Button _tapTempo = new() { Content = "Tap tempo" };
+    private readonly TextBlock _transposeText = new();
+    private readonly TextBlock _speedLabel = new();
+    private readonly TextBlock _speedText = new();
+    private readonly TextBlock _scrollHint = new();
+    private readonly StackPanel _speedSection = new();
+    private Control? _tapTempoRow;
     private readonly ToggleButton[] _modeButtons;
-    private readonly ToggleButton _diagrams = new() { Content = "Diagrams" };
-    private readonly ToggleButton _easyChords = new() { Content = "Easy chords" };
-    private readonly ToggleButton _numbers = new() { Content = "Numbers" };
-    private readonly ComboBox _instrumentBox = new() { MinWidth = 220 };
-    private readonly ComboBox _tuningBox = new() { MinWidth = 220 };
-    private readonly ComboBox _pitchBox = new() { MinWidth = 220, ItemsSource = new[] { "Standard pitch", "Half step down", "Whole step down" } };
-    private readonly TextBlock _capoText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 36, TextAlignment = TextAlignment.Center };
-    private readonly StackPanel _capoChoices = new() { Spacing = 6 };
+    private readonly ToggleSwitch _diagrams = new();
+    private readonly ToggleSwitch _easyChords = new();
+    private readonly ToggleSwitch _numbers = new();
+    private readonly ComboBox _instrumentBox = new();
+    private readonly ComboBox _tuningBox = new();
+    private readonly ComboBox _pitchBox = new() { ItemsSource = new[] { "Standard", "Half step down", "Whole step down" } };
+    private Control? _tuningRow;
+    private readonly TextBlock _capoText = new();
+    private readonly StackPanel _capoChoices = new();
+    private readonly TextBlock _fontSizeText = new();
+    private readonly ComboBox _themeBox = new() { ItemsSource = SongTheme.BuiltIn.Select(t => t.Name).ToList() };
     private readonly Flyout _chordsFlyout = new();
     private readonly Flyout _chordFlyout = new();
     private readonly Flyout _textFlyout = new();
@@ -84,9 +88,10 @@ internal sealed class StageView : UserControl
     private readonly Grid _barContent = new() { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
     private readonly Grid _lockedBar = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
     private readonly Button _unlock = new() { Content = "Hold to unlock" };
-    private readonly ToggleButton _halfPages = new() { Content = "Half-page turns" };
-    private readonly ComboBox _pedalLayout = new() { MinWidth = 260, ItemsSource = new[] { "Turn pages, then change songs", "Change songs", "← → change songs, ↑ ↓ turn pages" } };
-    private readonly ComboBox _pedalHold = new() { MinWidth = 260, ItemsSource = new[] { "Holding a pedal does nothing more", "Hold to change songs", "Hold to start or stop scrolling" } };
+    private readonly ToggleSwitch _halfPages = new();
+    // In the order of PedalLayout and PedalHold.
+    private readonly ComboBox _pedalLayout = new() { ItemsSource = new[] { "Pages, then songs", "Songs", "← → songs, ↑ ↓ pages" } };
+    private readonly ComboBox _pedalHold = new() { ItemsSource = new[] { "Nothing more", "Change songs", "Start or stop scrolling" } };
     // The pedal button held down, while waiting to see whether it's a press or a hold.
     private PedalButton? _heldButton;
     private bool _holdDone;
@@ -120,7 +125,6 @@ internal sealed class StageView : UserControl
         _scroller.ScrollChanged += (_, _) => UpdateNextPageShade();
 
         _play.Click += (_, _) => _smart.Toggle();
-        _tapTempo.Click += (_, _) => TapTempo();
         _modeButtons = [.. Modes.Select(mode =>
         {
             var button = new ToggleButton { Content = mode.ToString() };
@@ -138,13 +142,12 @@ internal sealed class StageView : UserControl
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         buttons.Children.Add(_play);
-        _scrollButton.Flyout = new Flyout { Content = ScrollPanel() };
+        _scrollButton.Flyout = MenuFlyout(new Flyout(), ScrollPanel());
         buttons.Children.Add(_scrollButton);
-        buttons.Children.Add(new Button { Content = "Chords ▾", Flyout = _chordsFlyout });
-        _textFlyout.Content = TextPanel();
-        buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = _textFlyout });
-        _chordsFlyout.Content = ChordsPanel();
+        buttons.Children.Add(new Button { Content = "Chords ▾", Flyout = MenuFlyout(_chordsFlyout, ChordsPanel()) });
+        buttons.Children.Add(new Button { Content = "Aa ▾", Flyout = MenuFlyout(_textFlyout, TextPanel()) });
         _chordsFlyout.Opening += (_, _) => UpdateChordControls();
+        _textFlyout.Opening += (_, _) => UpdateTextControls();
         _barContent.Children.Add(MakeButton($"‹ {backLabel}", back));
         Grid.SetColumn(title, 1);
         _barContent.Children.Add(title);
@@ -202,19 +205,24 @@ internal sealed class StageView : UserControl
         return button;
     }
 
-    private static StackPanel Row(params Control[] children)
+    // A menu under the toolbar, no taller than the space below it.
+    private Flyout MenuFlyout(Flyout flyout, Control menu)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        row.Children.AddRange(children);
-        return row;
+        flyout.Content = menu;
+        flyout.FlyoutPresenterClasses.Add("menu");
+        flyout.Placement = PlacementMode.BottomEdgeAlignedRight;
+        flyout.Opening += (_, _) => menu.MaxHeight = Math.Max(240, Bounds.Height - _bar.Bounds.Height - 48);
+        return flyout;
     }
 
-    // Scroll ▾: the mode, its speed or tempo, and tap tempo.
+    // Scroll ▾: the mode, its speed or tempo, and tap tempo; how pages turn and what pedals do.
     private Control ScrollPanel()
     {
-        _speedRow.Children.AddRange([MakeButton("−", () => StepSpeed(-1)), _speedText, MakeButton("+", () => StepSpeed(+1)), _tapTempo]);
+        _tapTempoRow = MenuParts.ActionRow("Tap tempo", TapTempo, "♩");
+        _speedSection.Children.Add(MenuParts.Section(null, (string?)null,
+            MenuParts.StepperRow(_speedLabel, _speedText, () => StepSpeed(-1), () => StepSpeed(+1)), _tapTempoRow));
         _halfPages.IsChecked = _settings.HalfPageTurns;
-        _halfPages.Click += (_, _) =>
+        _halfPages.IsCheckedChanged += (_, _) =>
         {
             _settings.HalfPageTurns = _halfPages.IsChecked == true;
             _settings.Save();
@@ -232,16 +240,13 @@ internal sealed class StageView : UserControl
             _settings.PedalHold = (PedalHold)Math.Max(0, _pedalHold.SelectedIndex);
             _settings.Save();
         };
-        return new StackPanel
-        {
-            Spacing = 10,
-            Children =
-            {
-                Row(_modeButtons), _speedRow, _scrollHint,
-                new TextBlock { Text = "Pages and pedal", FontSize = 13, Opacity = 0.7, Margin = new Thickness(0, 6, 0, 0) },
-                _halfPages, _pedalLayout, _pedalHold,
-            },
-        };
+        return MenuParts.Menu("Scrolling",
+            MenuParts.Section(null, _scrollHint, MenuParts.Segmented(_modeButtons)),
+            _speedSection,
+            MenuParts.Section("Pages and pedal", "A pedal turns pages; at the end of a song in a setlist it moves to the next song.",
+                MenuParts.SwitchRow("Half-page turns", _halfPages),
+                MenuParts.ChoiceRow("Pedal", _pedalLayout),
+                MenuParts.ChoiceRow("Hold a pedal", _pedalHold)));
     }
 
     // The player's instrument, for every song (as on the Mac, where it's View ▾ Diagrams for).
@@ -261,9 +266,9 @@ internal sealed class StageView : UserControl
     // Chords ▾: what the chords show, the instrument and the song's tuning, the capo, and the tuner.
     private Control ChordsPanel()
     {
-        _diagrams.Click += (_, _) => SetChordOption(() => _settings.ShowDiagrams = _diagrams.IsChecked == true);
-        _easyChords.Click += (_, _) => SetChordOption(() => _settings.SimplifyChords = _easyChords.IsChecked == true);
-        _numbers.Click += (_, _) => SetChordOption(() => _settings.ChordNumbers = _numbers.IsChecked == true);
+        _diagrams.IsCheckedChanged += (_, _) => SetChordOption(() => _settings.ShowDiagrams = _diagrams.IsChecked == true);
+        _easyChords.IsCheckedChanged += (_, _) => SetChordOption(() => _settings.SimplifyChords = _easyChords.IsChecked == true);
+        _numbers.IsCheckedChanged += (_, _) => SetChordOption(() => _settings.ChordNumbers = _numbers.IsChecked == true);
         _instrumentBox.ItemsSource = Instrument.All.Select(i => i.Name).ToList();
         _instrumentBox.SelectionChanged += (_, _) =>
         {
@@ -273,32 +278,19 @@ internal sealed class StageView : UserControl
         };
         _tuningBox.SelectionChanged += (_, _) => SongTuningChanged();
         _pitchBox.SelectionChanged += (_, _) => SongTuningChanged();
-        var tuner = MakeButton("Tuner", ShowTuner);
-        tuner.HorizontalAlignment = HorizontalAlignment.Stretch;
-
-        static TextBlock Label(string text) => new() { Text = text, FontSize = 13, Opacity = 0.7 };
-        return new ScrollViewer
-        {
-            MaxHeight = 560,
-            Content = new StackPanel
-            {
-                Spacing = 8,
-                MaxWidth = 340,
-                Children =
-                {
-                    Row(_diagrams, _easyChords, _numbers),
-                    Label("Instrument"),
-                    _instrumentBox,
-                    Label("This song's tuning"),
-                    _tuningBox,
-                    _pitchBox,
-                    Row(new TextBlock { Text = "Capo", VerticalAlignment = VerticalAlignment.Center },
-                        MakeButton("−", () => SetCapo(Capo - 1)), _capoText, MakeButton("+", () => SetCapo(Capo + 1))),
-                    _capoChoices,
-                    tuner,
-                },
-            },
-        };
+        _tuningRow = MenuParts.ChoiceRow("Tuning", _tuningBox);
+        return MenuParts.Menu("Chords",
+            MenuParts.Section(null, (string?)null,
+                MenuParts.SwitchRow("Chord diagrams", _diagrams),
+                MenuParts.SwitchRow("Easy chords", _easyChords),
+                MenuParts.SwitchRow("Numbers (1 4 5)", _numbers)),
+            MenuParts.Section("Instrument", "Tuning, pitch and capo are for this song only.",
+                MenuParts.ChoiceRow("Instrument", _instrumentBox),
+                _tuningRow,
+                MenuParts.ChoiceRow("Pitch", _pitchBox),
+                MenuParts.StepperRow("Capo", _capoText, () => SetCapo(Capo - 1), () => SetCapo(Capo + 1))),
+            _capoChoices,
+            MenuParts.Section(null, (string?)null, MenuParts.ActionRow("Tuner", ShowTuner)));
     }
 
     private int Capo => _songSettings.Capo ?? DefaultCapo;
@@ -329,34 +321,35 @@ internal sealed class StageView : UserControl
             .Select((i, index) => index == 0 && usual != player ? $"As the song says: {SongTuning.ShortName(i)}" : i.Name)
             .ToList();
         _tuningBox.SelectedIndex = _songSettings.Tuning is { } name ? Math.Max(0, _tuningChoices.FindIndex(i => i.Name == name)) : 0;
-        _tuningBox.IsVisible = _tuningChoices.Count > 1;
+        _tuningRow!.IsVisible = _tuningChoices.Count > 1;
         _pitchBox.SelectedIndex = Math.Clamp(-TuningOffset, 0, 2);
         _updatingChoices = false;
 
-        _capoText.Text = Capo.ToString();
+        _capoText.Text = Capo == 0 ? "None" : Capo.ToString();
         _capoChoices.Children.Clear();
         var choices = CapoSuggester.ForSong(_song, _songSettings.Transpose, _keyIncludesCapo, TuningOffset, _settings.SimplifyChords, CurrentInstrument);
-        if (choices.Count > 0)
-            _capoChoices.Children.Add(new TextBlock { Text = "Easiest capo positions (the song sounds the same)", FontSize = 13, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
-        foreach (var choice in choices)
+        if (choices.Count == 0)
+            return;
+        // Each a row to tap, the one in use checked.
+        var rows = choices.Select(choice =>
         {
-            var button = new Button
+            var content = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            content.Children.Add(new StackPanel
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Content = new StackPanel
+                Spacing = 2,
+                Children =
                 {
-                    Children =
-                    {
-                        new TextBlock { Text = choice.Capo == Capo ? $"{choice.Title}  (current)" : choice.Title, FontWeight = FontWeight.SemiBold },
-                        new TextBlock { Text = choice.Detail, Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap },
-                    },
+                    new TextBlock { Text = choice.Title, FontWeight = FontWeight.SemiBold },
+                    new TextBlock { Text = choice.Detail, Opacity = 0.7, FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.WordEllipsis },
                 },
-            };
+            });
+            var check = new TextBlock { Text = choice.Capo == Capo ? "✓" : "", FontSize = 18, Width = 28, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(check, 1);
+            content.Children.Add(check);
             var capo = choice.Capo;
-            button.Click += (_, _) => SetCapo(capo);
-            _capoChoices.Children.Add(button);
-        }
+            return (Control)MenuParts.Tappable(content, () => SetCapo(capo));
+        }).ToArray();
+        _capoChoices.Children.Add(MenuParts.Section("Easiest capo positions", "The song sounds the same with each.", rows));
     }
 
     private void SongTuningChanged()
@@ -426,20 +419,36 @@ internal sealed class StageView : UserControl
         });
     }
 
-    // Aa ▾: the lock, notes, text size, transpose and theme.
-    private Control TextPanel() => new StackPanel
+    // Aa ▾: text size, transpose and theme; notes and the lock.
+    private Control TextPanel()
     {
-        Spacing = 10,
-        Children =
+        _themeBox.SelectionChanged += (_, _) =>
         {
-            MakeButton("Lock the stage", () => SetLocked(true)),
-            MakeButton("Notes…", ShowNotes),
-            Row(MakeButton("A−", () => ChangeFont(-2)), MakeButton("A+", () => ChangeFont(+2))),
-            Row(new TextBlock { Text = "Transpose", VerticalAlignment = VerticalAlignment.Center },
-                MakeButton("−", () => ChangeTranspose(-1)), _transposeText, MakeButton("+", () => ChangeTranspose(+1))),
-            MakeButton("Next theme", NextTheme),
-        },
-    };
+            if (_updatingChoices || _themeBox.SelectedIndex < 0)
+                return;
+            _settings.Theme = SongTheme.BuiltIn[_themeBox.SelectedIndex].Name;
+            _settings.Save();
+            Render();
+        };
+        return MenuParts.Menu("Display",
+            MenuParts.Section("This song", (string?)null,
+                MenuParts.StepperRow("Text size", _fontSizeText, () => ChangeFont(-2), () => ChangeFont(+2)),
+                MenuParts.StepperRow("Transpose", _transposeText, () => ChangeTranspose(-1), () => ChangeTranspose(+1)),
+                MenuParts.ActionRow("Notes", ShowNotes)),
+            MenuParts.Section(null, (string?)null, MenuParts.ChoiceRow("Theme", _themeBox)),
+            MenuParts.Section(null, "Locked, only page turns and pedals work. Hold to unlock.",
+                MenuParts.ActionRow("Lock the stage", () => SetLocked(true), "🔒")));
+    }
+
+    private void UpdateTextControls()
+    {
+        _updatingChoices = true;
+        _themeBox.SelectedIndex = SongTheme.BuiltIn.ToList().IndexOf(MainView.CurrentTheme(_settings));
+        _updatingChoices = false;
+        _fontSizeText.Text = $"{SongFontSize / _deviceFontSize:0%}";
+        var transpose = _songSettings.Transpose;
+        _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
+    }
 
     private void ChangeFont(double step)
     {
@@ -453,15 +462,6 @@ internal sealed class StageView : UserControl
     {
         _songSettings.Transpose += step;
         _saved();
-        Render();
-    }
-
-    private void NextTheme()
-    {
-        var themes = SongTheme.BuiltIn;
-        var index = themes.ToList().FindIndex(t => t.Name == _settings.Theme);
-        _settings.Theme = themes[(index + 1) % themes.Count].Name;
-        _settings.Save();
         Render();
     }
 
@@ -512,10 +512,11 @@ internal sealed class StageView : UserControl
         var mode = Mode;
         for (var i = 0; i < Modes.Length; i++)
             _modeButtons[i].IsChecked = Modes[i] == mode;
-        _play.IsVisible = _speedRow.IsVisible = mode != ScrollMode.Manual;
+        _play.IsVisible = _speedSection.IsVisible = mode != ScrollMode.Manual;
         _play.Content = _smart.IsRunning ? "❚❚" : "▶";
+        _speedLabel.Text = mode == ScrollMode.Timed ? "Speed" : "Tempo";
         _speedText.Text = mode == ScrollMode.Timed ? $"{Speed:0.0}×" : $"{Tempo:0} BPM";
-        _tapTempo.IsVisible = mode == ScrollMode.Musical;
+        _tapTempoRow!.IsVisible = mode == ScrollMode.Musical;
         _scrollHint.Text = mode switch
         {
             ScrollMode.Manual => "Turn pages by tapping the top or bottom of the song, or with a pedal.",
@@ -575,6 +576,9 @@ internal sealed class StageView : UserControl
                 break;
             case "lock":
                 SetLocked(true);
+                break;
+            case "text":
+                Avalonia.Threading.DispatcherTimer.RunOnce(() => _textFlyout.ShowAt(_bar), TimeSpan.FromSeconds(1));
                 break;
             case "scroll":
                 Avalonia.Threading.DispatcherTimer.RunOnce(() => _scrollButton.Flyout?.ShowAt(_bar), TimeSpan.FromSeconds(1));
@@ -784,9 +788,9 @@ internal sealed class StageView : UserControl
         _bar.Background = _footer.Background = palette.CommentBackground;
         _readingMarker.Background = palette.Chord;
         _nextPageShade.Background = palette.Background;
-        _scrollHint.Foreground = _clock.Foreground = palette.MutedText;
+        _clock.Foreground = palette.MutedText;
+        UpdateTextControls();
         var transpose = _songSettings.Transpose;
-        _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
         _columns = ColumnsFor(Bounds.Width);
 
         _renderer = new SongRenderer(new RenderOptions

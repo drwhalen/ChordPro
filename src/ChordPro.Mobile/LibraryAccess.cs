@@ -20,7 +20,7 @@ internal sealed class LibraryAccess(MobileSettings settings)
     // given with `SIMCTL_CHILD_CHORDPRO_LIVE_LIBRARY=… xcrun simctl launch …`.
     private static readonly string? TestLibrary = Environment.GetEnvironmentVariable("CHORDPRO_LIVE_LIBRARY");
 #else
-    private const string? TestLibrary = null;
+    private static readonly string? TestLibrary = null; // not const: a constant null makes the checks below warnings
 #endif
 
     /// <summary>True once a library folder has been chosen (it may be out of reach right now).</summary>

@@ -11,6 +11,8 @@
     <ApplicationId>com.cranberrysoftware.chordpro-live</ApplicationId>
     <ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
+    <!-- The Mac icon's G chord, drawn full-bleed (iOS rounds the corners): Assets.xcassets/AppIcon.appiconset. -->
+    <AppIcon>AppIcon</AppIcon>
     <!-- Avalonia's own iOS and designer assemblies trip the trimmer (IL2037 in the generated registrar
          code, IL2104 for Avalonia.DesignerSupport); ChordPro.Core and ChordPro.UI are trimmable and
          report their own warnings individually. -->

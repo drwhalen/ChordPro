@@ -28,6 +28,27 @@ Gatekeeper warnings, sign it with an Apple Developer ID certificate (hardened ru
 `com.apple.security.device.audio-input` entitlement for the microphone) and notarize it with
 `xcrun notarytool`. The version comes from `<Version>` in `src/ChordPro.Viewer/ChordPro.Viewer.csproj`.
 
+## iPad and iPhone app (ChordPro Live)
+
+```sh
+scripts/run-ipad.sh                     # builds, installs and opens it on the connected iPad or iPhone
+```
+
+A free Apple ID is enough to put it on your own devices; no paid developer account is needed. Set up once:
+
+1. Connect the iPad with a cable, unlock it and tap **Trust** for this Mac.
+2. In Xcode, **Settings › Accounts › +**, sign in with your Apple ID. This makes a free "Personal Team".
+3. Let Xcode make a signing certificate and a provisioning profile for the app's bundle ID: **File › New ›
+   Project › iOS › App**, Product Name `chordpro-live`, Team: your Personal Team, Organization Identifier
+   `com.cranberrysoftware` (so the bundle ID reads `com.cranberrysoftware.chordpro-live`). Choose the iPad
+   as the run destination at the top of the window and press **Run** (⌘R). The project itself can be thrown
+   away afterwards.
+4. On the iPad: **Settings › Privacy & Security › Developer Mode** on (it restarts), and after the first
+   install **Settings › General › VPN & Device Management ›** your Apple ID **› Trust**.
+
+With a free account the app stops opening after 7 days: run `scripts/run-ipad.sh` again to reinstall
+(songs, settings and gigs are kept). A free account also allows at most 3 such apps on a device.
+
 ## Features
 
 | Toolbar / sidebar | What it does |

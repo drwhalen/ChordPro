@@ -18,6 +18,7 @@ dotnet test                                    # Core unit tests (xUnit)
 dotnet run --project src/ChordPro.Viewer -- samples/morning-road.cho
 scripts/package-mac.sh [arm64|x64]             # artifacts/ChordPro Viewer.app + .zip + .dmg
 dotnet build src/ChordPro.Mobile               # iOS app (simulator); not in the .slnx, needs Xcode + `ios` workload
+scripts/run-ipad.sh ["Device name"]            # iOS app on a real device (free Apple ID signing; see README)
 ```
 
 Keep the build at zero warnings. NuGet versions are pinned exactly (Avalonia 11.3.20 for every
@@ -78,12 +79,13 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   tap/pedal paging between fixed pages that start at sections, with the next page's start shaded below; per-song settings shared with the Mac; in a gig, Previous / Next with the
   next song's key and the set clock, and a pedal press at either end of a song moves to the next or previous song), `LibraryAccess` (Files folder picker,
   security-scoped bookmark, `LibraryMirror` refresh into Application Support, asks iCloud to download
-  placeholders), `TunerView` + `AudioInput` (AVAudioEngine), `MobileSettings` (+ `AppFolders`), `ErrorLog` (unhandled errors to errors.log in Application Support and the console). Songs are always read from the device's copy.
-  The samples are embedded for the first launch and App Store review.
+  placeholders), `MenuParts` (the stage menus' iOS Settings-style sections, rows, switches and steppers, colored by theme resources), `TunerView` + `AudioInput` (AVAudioEngine), `MobileSettings` (+ `AppFolders`), `ErrorLog` (unhandled errors to errors.log in Application Support and the console). Songs are always read from the device's copy.
+  The samples are embedded for the first launch and App Store review. The icon (`Assets.xcassets/AppIcon.appiconset`, one
+  1024-pixel PNG, no transparency) is the Mac icon's G chord drawn full-bleed, since iOS rounds the corners itself.
   Debug builds read `CHORDPRO_LIVE_LIBRARY` (a library folder on the Mac, instead of the picker) and
   `CHORDPRO_LIVE_OPEN` (opens a song by title), `CHORDPRO_LIVE_SETLIST` (opens a setlist by name) and
   `CHORDPRO_LIVE_SETLIST_SONG` (plays its entry at that index), `CHORDPRO_LIVE_SCROLL` (starts scrolling
-  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `scroll`, `tuner`, `notes`, `lock`, `chord:G` or `page:2`, which turns pages down) and `CHORDPRO_LIVE_TUNER=test` (a test tone
+  in that mode), `CHORDPRO_LIVE_SHOW` (`chords`, `scroll`, `text`, `tuner`, `notes`, `lock`, `chord:G` or `page:2`, which turns pages down) and `CHORDPRO_LIVE_TUNER=test` (a test tone
   instead of the microphone), `CHORDPRO_LIVE_GIG` (`request`, `edit` or `log`, on a gig resumed at launch), passed as `SIMCTL_CHILD_…` to `simctl launch`. It suppresses IL2037/IL2104,
   which come from Avalonia's own iOS and designer assemblies.
 - `tests/ChordPro.Core.Tests` — tests for Core only; there is no UI test project.
