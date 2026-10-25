@@ -86,40 +86,15 @@ public static class PageLayout
     }
 
     /// <summary>
-    /// Where the view should move to show the next screenful: the first line that isn't fully
-    /// visible, or the start of its section if that lets the whole section be seen at once.
-    /// Null when everything below is already visible.
+    /// Where a page turn (+1 down, −1 up) from <paramref name="offset"/> moves the view, over fixed pages that
+    /// start at <paramref name="pageStarts"/> (see <see cref="PageStarts"/>): to the next page, or to the start of
+    /// the page before the one showing, so paging down and back up shows the same pages and each starts at a
+    /// section where one fits. Null when there's no next page.
     /// </summary>
-    public static double? NextPageTop(IReadOnlyList<PageGroup> groups, double offset, double viewportHeight)
-    {
-        var bottom = offset + viewportHeight;
-        foreach (var group in groups.Where(g => g.Lines.Count > 0))
-        {
-            foreach (var line in group.Lines)
-            {
-                if (line.Bottom <= bottom + 0.5)
-                    continue;
-
-                var target = line.Top;
-                // A section cut off at the bottom: show it whole on the next screen if it fits.
-                if (group.Top > offset + 0.5 && group.Top < target && group.Height <= viewportHeight)
-                    target = group.Top;
-                return target > offset + 0.5 ? target : null;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Where the view should move to show the previous screenful: ending where the current view
-    /// starts, with no line cut off at the top.
-    /// </summary>
-    public static double PreviousPageTop(IReadOnlyList<PageGroup> groups, double offset, double viewportHeight)
-    {
-        var target = Math.Max(0, offset - viewportHeight);
-        var lineTop = groups.SelectMany(g => g.Lines).Select(l => l.Top).Where(t => t >= target - 0.5).DefaultIfEmpty(target).Min();
-        return lineTop < offset - 0.5 ? lineTop : target;
-    }
+    public static double? Turn(IReadOnlyList<double> pageStarts, double offset, int direction) =>
+        direction > 0
+            ? pageStarts.Where(top => top > offset + 0.5).Select(top => (double?)top).FirstOrDefault()
+            : pageStarts.Where(top => top < offset - 0.5).Select(top => (double?)top).LastOrDefault() ?? 0;
 
     // The lowest point that must share a page with the group: its end, or the first lines of the
     // next group when it is kept with the next.

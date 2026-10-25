@@ -27,6 +27,7 @@ public sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        ErrorLog.InstallForUIThread();
         // On stage the screen must never dim or lock between songs.
         UIKit.UIApplication.SharedApplication.IdleTimerDisabled = true;
         if (ApplicationLifetime is ISingleViewApplicationLifetime lifetime)

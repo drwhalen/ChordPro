@@ -74,35 +74,27 @@ public class PageLayoutTests
     }
 
     [Fact]
-    public void NextScreenStartsAtTheFirstLineNotFullyVisible()
+    public void PageTurnsMoveBetweenPagesThatStartAtSections()
     {
-        // View 0–210 shows lines up to 200; the line at 200 is cut off.
-        Assert.Equal(200, PageLayout.NextPageTop([Section(0, 20)], 0, 210));
+        // Verse 0–100, chorus 120–200: in a 160 view the chorus is cut off, so the second page starts at it.
+        var starts = PageLayout.PageStarts([Section(0, 5), Section(120, 4)], 160);
+        Assert.Equal([0.0, 120.0], starts);
+        Assert.Equal(120, PageLayout.Turn(starts, 0, +1));
+        Assert.Null(PageLayout.Turn(starts, 120, +1));
     }
 
     [Fact]
-    public void NextScreenShowsACutOffChorusWhole()
+    public void PageUpReturnsToThePageBefore()
     {
-        // Verse 0–100, chorus 120–200 cut off by a view ending at 160: the next screen starts at the chorus.
-        Assert.Equal(120, PageLayout.NextPageTop([Section(0, 5), Section(120, 4)], 0, 160));
+        double[] starts = [0, 120, 300];
+        Assert.Equal(120, PageLayout.Turn(starts, 300, -1));
+        // Between pages (after dragging), up goes to the start of the page showing at the top.
+        Assert.Equal(120, PageLayout.Turn(starts, 200, -1));
+        Assert.Equal(0, PageLayout.Turn(starts, 120, -1));
+        Assert.Equal(0, PageLayout.Turn(starts, 0, -1));
     }
 
     [Fact]
-    public void NextScreenDoesNotJumpBackForASectionTallerThanTheView()
-    {
-        // The section starts at 120 but is 400 tall, so carry on from the cut-off line instead.
-        Assert.Equal(160, PageLayout.NextPageTop([Section(0, 5), Section(120, 20)], 0, 170));
-    }
-
-    [Fact]
-    public void NoNextScreenWhenTheEndIsVisible() =>
-        Assert.Null(PageLayout.NextPageTop([Section(0, 5)], 0, 200));
-
-    [Fact]
-    public void PreviousScreenEndsWhereTheCurrentOneStarts()
-    {
-        // At offset 300 with a 210 view: go back to 90, snapped down to the line at 100.
-        Assert.Equal(100, PageLayout.PreviousPageTop([Section(0, 30)], 300, 210));
-        Assert.Equal(0, PageLayout.PreviousPageTop([Section(0, 30)], 100, 210));
-    }
+    public void PageDownFromBetweenPagesGoesToTheNextStart() =>
+        Assert.Equal(300, PageLayout.Turn([0, 120, 300], 200, +1));
 }

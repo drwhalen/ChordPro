@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using ChordPro.Core;
 using ChordPro.Core.Chords;
+using ChordPro.Core.Layout;
 using ChordPro.Core.Scrolling;
 using ChordPro.Core.Themes;
 using ChordPro.UI;
@@ -47,6 +48,8 @@ internal sealed class StageView : UserControl
     private readonly Border _content = new() { Padding = new Thickness(16, 12) };
     // Marks the line being played while scrolling musically.
     private readonly Border _readingMarker = new() { Width = 4, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, IsVisible = false };
+    // Shades the start of the next page where it shows below this one, so each screen ends with a whole section.
+    private readonly Border _nextPageShade = new() { VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false, Opacity = 0.85, IsVisible = false };
     private readonly Border _bar = new() { Padding = new Thickness(8, 6) };
     private readonly Border _footer = new() { Padding = new Thickness(8, 6) };
     private readonly Button _play = new();
@@ -109,7 +112,12 @@ internal sealed class StageView : UserControl
             // Half-page turns aim at half the screen, so the line being read moves to the top half.
             PageTarget = (direction, offset, height) => _renderer?.PageTop(direction, offset, _settings.HalfPageTurns ? height / 2 : height, _content),
         };
-        _smart.RunningChanged += (_, _) => UpdateScrollControls();
+        _smart.RunningChanged += (_, _) =>
+        {
+            UpdateScrollControls();
+            UpdateNextPageShade();
+        };
+        _scroller.ScrollChanged += (_, _) => UpdateNextPageShade();
 
         _play.Click += (_, _) => _smart.Toggle();
         _tapTempo.Click += (_, _) => TapTempo();
@@ -168,7 +176,7 @@ internal sealed class StageView : UserControl
             root.Children.Add(_footer);
         }
         _scroller.Content = _content;
-        root.Children.Add(new Grid { Children = { _scroller, _readingMarker } });
+        root.Children.Add(new Grid { Children = { _scroller, _nextPageShade, _readingMarker } });
         Content = root;
 
         Focusable = true;
@@ -210,6 +218,7 @@ internal sealed class StageView : UserControl
         {
             _settings.HalfPageTurns = _halfPages.IsChecked == true;
             _settings.Save();
+            UpdateNextPageShade();
         };
         _pedalLayout.SelectedIndex = (int)_settings.PedalLayout;
         _pedalLayout.SelectionChanged += (_, _) =>
@@ -570,6 +579,11 @@ internal sealed class StageView : UserControl
             case "scroll":
                 Avalonia.Threading.DispatcherTimer.RunOnce(() => _scrollButton.Flyout?.ShowAt(_bar), TimeSpan.FromSeconds(1));
                 break;
+            case ['p', 'a', 'g', 'e', ':', .. var pages] when int.TryParse(pages, out var count):
+                // =page:2 turns two pages down, a few seconds apart, so each can be screenshotted.
+                for (var i = 1; i <= count; i++)
+                    Avalonia.Threading.DispatcherTimer.RunOnce(() => Page(+1), TimeSpan.FromSeconds(4 * i));
+                break;
             case ['c', 'h', 'o', 'r', 'd', ':', .. var chord]:
                 Avalonia.Threading.DispatcherTimer.RunOnce(() =>
                 {
@@ -746,6 +760,21 @@ internal sealed class StageView : UserControl
             _smart.Page(direction);
     }
 
+    // Paging by hand, the part of the next page that shows at the bottom is shaded: the page turn will bring it to
+    // the top. Not while scrolling (it all moves), with half-page turns, or at the end, where all that's left shows.
+    private void UpdateNextPageShade()
+    {
+        var viewport = _scroller.Viewport.Height;
+        var maxOffset = _scroller.Extent.Height - viewport;
+        var offset = _scroller.Offset.Y;
+        double? next = _smart.IsRunning || _settings.HalfPageTurns || offset >= maxOffset - 1 || _renderer is null
+            ? null
+            : _renderer.PageOffsets(viewport, _content) is { } pages ? PageLayout.Turn(pages, offset, +1) : null;
+        _nextPageShade.IsVisible = next - offset < viewport;
+        if (_nextPageShade.IsVisible)
+            _nextPageShade.Height = viewport - (next!.Value - offset);
+    }
+
     private void Render()
     {
         var theme = MainView.CurrentTheme(_settings);
@@ -754,6 +783,7 @@ internal sealed class StageView : UserControl
         Background = _scroller.Background = palette.Background;
         _bar.Background = _footer.Background = palette.CommentBackground;
         _readingMarker.Background = palette.Chord;
+        _nextPageShade.Background = palette.Background;
         _scrollHint.Foreground = _clock.Foreground = palette.MutedText;
         var transpose = _songSettings.Transpose;
         _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");

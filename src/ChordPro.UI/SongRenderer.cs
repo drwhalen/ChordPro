@@ -108,21 +108,25 @@ public sealed partial class SongRenderer(RenderOptions options)
     }
 
     /// <summary>
-    /// Where a page turn (+1 down, −1 up) from <paramref name="offset"/> should move the view: to a line
-    /// boundary, keeping a chorus together where it fits on screen. Null with two columns, where there's
-    /// no single top-to-bottom order of lines.
+    /// The scroll offsets where the song's screen-sized pages start, for a view <paramref name="viewportHeight"/>
+    /// tall: laid out as for printing, so a section that fits on a screen starts a page rather than being cut
+    /// off. Null with two columns, where there's no single top-to-bottom order of lines.
     /// </summary>
-    public double? PageTop(int direction, double offset, double viewportHeight, Visual root)
+    public List<double>? PageOffsets(double viewportHeight, Visual root)
     {
         if (options.Columns > 1)
             return null;
-        var groups = PageGroups(root);
-        var target = direction > 0
-            ? PageLayout.NextPageTop(groups, offset, viewportHeight) ?? double.MaxValue
-            : PageLayout.PreviousPageTop(groups, offset, viewportHeight);
-        // Leave a little room above the new top line rather than pressing it against the edge.
-        return target is > 0 and < double.MaxValue ? target - FontSize * 0.5 : target;
+        // Leave a little room above each page's top line rather than pressing it against the edge.
+        var margin = FontSize * 0.5;
+        return [.. PageLayout.PageStarts(PageGroups(root), viewportHeight - margin).Select(top => top > 0 ? top - margin : 0)];
     }
+
+    /// <summary>
+    /// Where a page turn (+1 down, −1 up) from <paramref name="offset"/> should move the view: to the next or
+    /// previous of the <see cref="PageOffsets"/> (the end of the song past the last). Null with two columns.
+    /// </summary>
+    public double? PageTop(int direction, double offset, double viewportHeight, Visual root) =>
+        PageOffsets(viewportHeight, root) is { } pages ? PageLayout.Turn(pages, offset, direction) ?? double.MaxValue : null;
 
     /// <summary>The control showing each line, keyed by section and line index (hidden lines are absent).</summary>
     public Dictionary<(Section, int), Control> LineControls { get; } = [];
