@@ -98,6 +98,9 @@ internal sealed class StageView : UserControl
     private readonly Stopwatch _tapClock = Stopwatch.StartNew();
     private SongRenderer? _renderer;
     private int _columns = 1;
+#if DEBUG
+    private static bool _debugHooksUsed;
+#endif
 
     /// <param name="saved">Called after the song's settings change, to share them.</param>
     /// <param name="place">The song's place in the setlist being played; null for a song opened from the list.</param>
@@ -555,6 +558,11 @@ internal sealed class StageView : UserControl
         if (_place is not null)
             _clockTimer.Start();
 #if DEBUG
+        // The hooks below are for the first song shown only: the variables last as long as the app, and every
+        // song opened afterwards would otherwise open the same menu again.
+        if (_debugHooksUsed)
+            return;
+        _debugHooksUsed = true;
         // For simulator checks: scroll in a mode as soon as the song is laid out (SIMCTL_CHILD_CHORDPRO_LIVE_SCROLL=Musical).
         if (Environment.GetEnvironmentVariable("CHORDPRO_LIVE_SCROLL") is { } name && Enum.TryParse<ScrollMode>(name, out var mode))
         {
