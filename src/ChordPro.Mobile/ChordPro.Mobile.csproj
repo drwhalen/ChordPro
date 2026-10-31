@@ -19,6 +19,13 @@
     <NoWarn>$(NoWarn);IL2037;IL2104</NoWarn>
   </PropertyGroup>
 
+  <!-- .NET for iOS 27.1 insists on Xcode 27.1 and this Mac has 27.2. Debug (simulator) builds skip the check,
+       and so does scripts/run-ipad.sh; other Release builds, which go to TestFlight, keep it. Remove this once a
+       .NET for iOS release supports the installed Xcode. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Public-domain and original songs, for the first launch (and App Store review) before a library is chosen. -->
     <EmbeddedResource Include="..\..\samples\*.cho" LogicalName="samples/%(Filename)%(Extension)" />

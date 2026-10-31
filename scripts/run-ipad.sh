@@ -36,6 +36,7 @@ echo "Installing on ${devices[1]#*$'\t'}"
 identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Apple Development: .*\)"/\1/p' | head -1)
 [[ -n $identity ]] || { echo "No Apple Development certificate; do the one-time Xcode set-up in the README." >&2; exit 1; }
 
-dotnet build $project -c Release -r ios-arm64 -p:CodesignKey="$identity"
+# ValidateXcodeVersion=false: .NET for iOS 27.1 wants Xcode 27.1 and this Mac has 27.2 (see the csproj).
+dotnet build $project -c Release -r ios-arm64 -p:CodesignKey="$identity" -p:ValidateXcodeVersion=false
 xcrun devicectl device install app --device $device $app
 xcrun devicectl device process launch --device $device com.cranberrysoftware.chordpro-live || true
