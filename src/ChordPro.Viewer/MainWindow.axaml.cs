@@ -540,7 +540,7 @@ public partial class MainWindow : Window
         StatusText.Text = shape is null ? $"Back to the usual {chord}" : $"Saved this {chord} fingering in the song";
     }
 
-    // Song ▾: transpose and capo (with the easiest capo positions), My key and the notes.
+    // Song ▾: transpose and capo (with the easiest capo positions), I sing this and the notes.
     private void OnSongMenuOpening(object? sender, EventArgs e)
     {
         StageNotesBox.Text = _path is null ? "" : _settings.SettingsOf(_path)?.Notes ?? "";
@@ -610,7 +610,7 @@ public partial class MainWindow : Window
         ShownKeyText.IsVisible = shownKey is not null;
         CapoResetButton.Content = (_capo ?? DefaultCapo).ToString();
         CapoResetButton.IsEnabled = _capo is not null;
-        FitsVoiceToggle.IsChecked = _path is not null && _settings.SettingsOf(_path)?.FitsVoice == true;
+        UpdateSingThis();
         SongButton.IsEnabled = _path is not null;
         if (SongButton.Flyout?.IsOpen == true)
             FillCapoSuggestions(); // a new key or capo changes them
@@ -642,31 +642,76 @@ public partial class MainWindow : Window
         _trainingWindow.Show(this);
     }
 
-    private void OnFitsVoiceClick(object? sender, RoutedEventArgs e)
+    private int? SingTranspose => _path is null ? null : _settings.SettingsOf(_path)?.SingTranspose;
+
+    // The open song's key as heard at a transposition, as its header shows it.
+    private string? KeyAt(int transpose) =>
+        ChordTransposer.Shift(ChordTransposer.SoundingKey(_song?.Key, FileCapo, _settings.KeyIncludesCapo, TuningOffset), transpose);
+
+    // The key ("A") or, for a song without a {key}, the transposition.
+    private string SungKeyName(int transpose) =>
+        KeyAt(transpose) is { } key ? key : transpose == 0 ? "the original key" : $"{transpose:+0;−0}";
+
+    private void UpdateSingThis()
+    {
+        var sung = SingTranspose;
+        SingThisToggle.IsChecked = sung is not null;
+        // Twelve semitones apart is the same key.
+        var elsewhere = sung is { } at && (at - _transpose) % 12 != 0;
+        SungKeyChoices.IsVisible = elsewhere;
+        if (sung is not { } transpose)
+        {
+            SingThisNote.Text = "Mark the songs you sing; the key you sing each one in is remembered.";
+            return;
+        }
+        var sungIn = SungKeyName(transpose);
+        SingThisNote.Text = elsewhere ? $"You sing this in {sungIn} (now in {SungKeyName(_transpose)})." : $"You sing this in {sungIn}.";
+        BackToSungKeyButton.Content = $"Back to {sungIn}";
+        SingInShownKeyButton.Content = $"Sing it in {SungKeyName(_transpose)}";
+    }
+
+    private void OnSingThisClick(object? sender, RoutedEventArgs e)
     {
         if (_path is null || _song is null)
         {
-            FitsVoiceToggle.IsChecked = false;
+            SingThisToggle.IsChecked = false;
             return;
         }
-        var fits = FitsVoiceToggle.IsChecked == true;
-        _settings.ForSong(_path).FitsVoice = fits;
-        _settings.Save();
-        var key = ChordTransposer.Shift(ChordTransposer.SoundingKey(_song.Key, FileCapo, _settings.KeyIncludesCapo, TuningOffset), _transpose);
-        StatusText.Text = fits
-            ? $"Noted: {_song.Title ?? "this song"}{(key is null ? "" : $" in {key}")} sits well for your voice"
-            : $"No longer marked as fitting your voice";
+        var sings = SingThisToggle.IsChecked == true;
+        MarkSung(sings ? _transpose : null);
     }
 
-    // The keys the singer is comfortable in: songs they marked, and songs they transposed.
+    private void OnBackToSungKeyClick(object? sender, RoutedEventArgs e)
+    {
+        if (SingTranspose is { } transpose)
+            SetTranspose(transpose);
+    }
+
+    private void OnSingInShownKeyClick(object? sender, RoutedEventArgs e) => MarkSung(_transpose);
+
+    private void MarkSung(int? transpose)
+    {
+        if (_path is null || _song is null)
+            return;
+        _settings.ForSong(_path).SingTranspose = transpose;
+        _settings.Save();
+        UpdateSingThis();
+        if (IsSingFilterOn)
+            ApplyLibraryFilter(scrollToSong: false);
+        StatusText.Text = transpose is { } at
+            ? $"Noted: you sing {_song.Title ?? "this song"} in {SungKeyName(at)}"
+            : "No longer marked as a song you sing";
+    }
+
+    // The keys the singer is comfortable in: the keys of the songs they sing.
     private VoiceRange LearnedVoice()
     {
         var byPath = _library.ToDictionary(s => s.Path);
         var keys = _settings.AllSongSettings()
-            .Where(s => s.Value.FitsVoice || s.Value.Transpose != 0)
+            .Where(s => s.Value.SingTranspose is not null)
             .Select(s => byPath.GetValueOrDefault(s.Key))
             .OfType<SongInfo>()
-            .Select(s => PlannedFor(s).Key)
+            .Select(SungKeyOf)
             .OfType<string>();
         return new VoiceRange([.. keys]);
     }
@@ -1737,7 +1782,11 @@ public partial class MainWindow : Window
     }
 
     // Searching or filtering by key or capo narrows the list, so every group starts expanded.
-    private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null || FitFilter > 0;
+    private bool IsSingFilterOn => SingFilterToggle.IsChecked == true;
+
+    private bool IsLibraryNarrowed => !string.IsNullOrWhiteSpace(SearchBox.Text) || KeyFilter is not null || CapoFilter is not null || FitFilter > 0 || IsSingFilterOn;
+
+    private void OnSingFilterClick(object? sender, RoutedEventArgs e) => OnLibraryFilterChanged();
 
     /// <param name="scrollToSong">Scroll the library to the open song (not while a group is being opened).</param>
     private void ApplyLibraryFilter(bool scrollToSong = true)
@@ -1745,6 +1794,8 @@ public partial class MainWindow : Window
         var songs = SongLibrary.Filter(_library, SearchBox.Text, KeyFilter, CapoFilter, _settings.KeyIncludesCapo);
         if (FitFilter > 0)
             songs = [.. songs.Where(s => FitsInstrument(s, allowTransposing: FitFilter == 2))];
+        if (IsSingFilterOn)
+            songs = [.. songs.Where(s => _settings.SettingsOf(s.Path)?.SingTranspose is not null)];
         _updatingLists = true;
         LibraryList.ItemsSource = Grouping == LibraryGrouping.None ? songs : GroupedLibraryItems(songs);
         _updatingLists = false;
@@ -2451,6 +2502,12 @@ public partial class MainWindow : Window
     }
 
     // How the player plays a song: the key heard after their transpose, their tempo and capo, and plays.
+    // The key a library song is sung in (as heard), when it's marked I sing this.
+    private string? SungKeyOf(SongInfo song) =>
+        _settings.SettingsOf(song.Path)?.SingTranspose is { } transpose
+            ? ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _settings.KeyIncludesCapo, TuningOffsetOf(song)), transpose)
+            : null;
+
     private PlannedSong PlannedFor(SongInfo song)
     {
         var settings = _settings.SettingsOf(song.Path);

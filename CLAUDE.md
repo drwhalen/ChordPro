@@ -42,7 +42,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
     usually comes next, and Nashville numbers), `Chords/SongFingerings` (writes a
     chosen fingering as `{define}` or `{define-<selector>}`, see `Instrument.Selector`); a second `{key}`
     parses to a `KeyChangeLine`, `VoiceRange`
-    (comfortable keys learned from "My key" marks and transposes), `SongTime`
+    (comfortable keys learned from the keys of songs marked "I sing this", `SongSettings.SingTranspose`), `SongTime`
   - `Chords/` — `ChordName` (chord → intervals), `ChordShapeFinder` (fretboard search for any tuning),
     `StandardShapes` (conventional guitar shapes that override the search), `ChordDifficulty`,
     `ChordSimplifier` (easy chords), `CapoSuggester`, `Instrument` (guitar, ukulele and mandolin tunings, dulcimer/Merlin tunings; a
@@ -99,7 +99,7 @@ pulled in a vulnerable Tmds.DBus.Protocol, which is why it was bumped.
   expressions, `GeneratedRegex`, XML doc comments on public members, comments that explain *why*.
 - Custom ChordPro directives use the `x_` prefix (`{x_bars}`, `{x_time}`) so other ChordPro apps ignore
   them; section attributes use `key="value"` (`bars="16"`). Unknown directives are ignored, not errors.
-- Per-song state (transpose, capo, font size, scroll mode/speed/tempo, plays, My key, tuning, stage notes) for songs in
+- Per-song state (transpose, capo, font size, scroll mode/speed/tempo, plays, I sing this, tuning, stage notes) for songs in
   the library lives in the library's own `.chordpro-viewer.json` (`LibrarySongSettings`), keyed by
   library-relative path with `/`, so the Mac and iOS apps share it through iCloud; saves merge song by
   song, newest `Modified` winning. Songs outside the library stay in `AppSettings.Songs` by full path, and

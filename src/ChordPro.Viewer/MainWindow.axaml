@@ -220,7 +220,7 @@
                     </StackPanel>
                     <Border Classes="divider" />
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button x:Name="SongButton" IsEnabled="False" ToolTip.Tip="Transpose, capo, My key and notes for this song">
+                        <Button x:Name="SongButton" IsEnabled="False" ToolTip.Tip="Transpose, capo, I sing this and notes for this song">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="Song" />
                                 <TextBlock x:Name="ShownKeyText" Classes="muted" />
@@ -253,13 +253,20 @@
                                                 </Grid>
                                                 <Border Classes="separator" />
                                                 <Grid Classes="row" ColumnDefinitions="*,Auto">
-                                                    <TextBlock Text="My key" />
-                                                    <ToggleSwitch x:Name="FitsVoiceToggle" Grid.Column="1" Click="OnFitsVoiceClick"
-                                                                  ToolTip.Tip="This song, in the key shown, sits well for my voice. Suggest a set learns your range from these (and from songs you've transposed)." />
+                                                    <TextBlock Text="I sing this" />
+                                                    <ToggleSwitch x:Name="SingThisToggle" Grid.Column="1" Click="OnSingThisClick"
+                                                                  ToolTip.Tip="I sing this song, in the key shown. The key is remembered, and Songs I sing in the library finds these again." />
                                                 </Grid>
+                                                <!-- Shown when the song has been transposed away from the key it's sung in. -->
+                                                <StackPanel x:Name="SungKeyChoices" IsVisible="False">
+                                                    <Border Classes="separator" />
+                                                    <Button x:Name="BackToSungKeyButton" Classes="row" Click="OnBackToSungKeyClick" />
+                                                    <Border Classes="separator" />
+                                                    <Button x:Name="SingInShownKeyButton" Classes="row" Click="OnSingInShownKeyClick" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <TextBlock Classes="note" Text="My key: this key sits well for your voice. Suggest a set learns your range from it." />
+                                        <TextBlock x:Name="SingThisNote" Classes="note" Text="Mark the songs you sing; the key you sing each one in is remembered." />
                                         <TextBlock Classes="heading" Text="EASIEST CAPO POSITIONS" />
                                         <Border Classes="card">
                                             <StackPanel x:Name="CapoSuggestions" />
@@ -411,6 +418,8 @@
                             <!-- For dulcimers and the Merlin, whose frets leave some chords out. -->
                             <ComboBox x:Name="FitFilterCombo" HorizontalAlignment="Stretch" SelectionChanged="OnLibraryFilterChanged" IsVisible="False"
                                       ToolTip.Tip="Show only songs whose chords all have a fingering on your instrument (as the song is now, or after transposing)" />
+                            <CheckBox x:Name="SingFilterToggle" Content="Songs I sing" Click="OnSingFilterClick"
+                                      ToolTip.Tip="Show only the songs you marked I sing this" />
                         </StackPanel>
                         <!-- SyncListSelections scrolls to the open song itself, except while a group is opened. -->
                         <ListBox x:Name="LibraryList" AutoScrollToSelectedItem="False" SelectionChanged="OnSongListSelectionChanged" />

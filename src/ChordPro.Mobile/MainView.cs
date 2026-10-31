@@ -27,7 +27,7 @@ internal sealed class MainView : UserControl
     public MainView()
     {
         _access = new LibraryAccess(_settings);
-        _library = new LibraryView(_settings, ChooseLibraryAsync, info => Open(info.Path, "Songs", Back), OpenSetlist, ShowGig, OpenLog);
+        _library = new LibraryView(_settings, ChooseLibraryAsync, info => Open(info.Path, "Songs", Back), OpenSetlist, ShowGig, OpenLog, SungKey);
         Content = _library;
         ApplyTheme();
         // Coming back to the app (from Files, or after a while away): pick up changes made on the Mac.
@@ -367,13 +367,22 @@ internal sealed class MainView : UserControl
     // The key a song will be heard in, as its header shows it: after its capo, tuning and saved transpose.
     private string? HeardKey(SongInfo song)
     {
-        var saved = _songSettings?.KeyFor(song.Path) is { } key ? _songSettings.Get(key) : null;
-        var sounding = ChordTransposer.SoundingKey(song.Key, song.Capo, _keyIncludesCapo, saved?.TuningOffset ?? song.TuningOffset);
-        return ChordTransposer.Shift(sounding, saved?.Transpose ?? 0);
+        var saved = SavedSettings(song);
+        return KeyAt(song, saved, saved?.Transpose ?? 0);
     }
+
+    // For a song marked "I sing this", the key it's sung in ("" for a song without a key); null otherwise.
+    private string? SungKey(SongInfo song) =>
+        SavedSettings(song) is { SingTranspose: { } transpose } saved ? KeyAt(song, saved, transpose) ?? "" : null;
+
+    private SongSettings? SavedSettings(SongInfo song) => _songSettings?.KeyFor(song.Path) is { } key ? _songSettings.Get(key) : null;
+
+    private string? KeyAt(SongInfo song, SongSettings? saved, int transpose) =>
+        ChordTransposer.Shift(ChordTransposer.SoundingKey(song.Key, song.Capo, _keyIncludesCapo, saved?.TuningOffset ?? song.TuningOffset), transpose);
 
     private void Back()
     {
+        _library.Refresh();
         Content = _library;
         ApplyTheme();
     }

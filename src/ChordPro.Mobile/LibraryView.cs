@@ -37,11 +37,14 @@ internal sealed class LibraryView : UserControl
     private Gig? _currentGig;
     private List<GigLogEntry> _gigLog = [];
     private SongPalette _palette = SongPalette.Print;
+    private readonly Func<SongInfo, string?> _sungKey;
 
+    /// <param name="sungKey">For a song marked "I sing this", the key it's sung in (or "" when it has no key); null otherwise.</param>
     public LibraryView(MobileSettings settings, Func<Task> chooseLibrary, Action<SongInfo> open, Action<SetlistSummary> openSetlist,
-        Action openGig, Action<GigLogEntry> openLog)
+        Action openGig, Action<GigLogEntry> openLog, Func<SongInfo, string?> sungKey)
     {
         _settings = settings;
+        _sungKey = sungKey;
         _songsTab.Click += (_, _) => ShowTab(setlists: false);
         _setlistsTab.Click += (_, _) => ShowTab(setlists: true);
         var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { _songsTab, _setlistsTab } };
@@ -109,6 +112,9 @@ internal sealed class LibraryView : UserControl
         ShowItems();
     }
 
+    /// <summary>Lists the songs again, for settings changed on stage (a song marked "I sing this").</summary>
+    public void Refresh() => ShowItems();
+
     /// <summary>The gig being played (or null) and finished gigs, newest first, shown with the setlists.</summary>
     public void SetGigs(Gig? current, List<GigLogEntry> log)
     {
@@ -149,8 +155,15 @@ internal sealed class LibraryView : UserControl
     }
 
     private Control SongRow(SongInfo song) =>
-        Row(song.Title, string.Join(" · ", new[] { song.Artist, song.Key is null ? null : $"Key {song.Key}", song.Capo > 0 ? $"Capo {song.Capo}" : null }
+        Row(song.Title, string.Join(" · ", new[] { song.Artist, song.Key is null ? null : $"Key {song.Key}", song.Capo > 0 ? $"Capo {song.Capo}" : null, SungText(song) }
             .Where(s => !string.IsNullOrEmpty(s))));
+
+    private string? SungText(SongInfo song) => _sungKey(song) switch
+    {
+        null => null,
+        "" => "I sing this",
+        var key => $"Sing in {key}",
+    };
 
     private Control Row(string title, string details)
     {

@@ -45,7 +45,7 @@ public sealed class SetlistSuggestWindow : Window
 
     /// <param name="setlist">The songs in the setlist now: kept in every suggestion.</param>
     /// <param name="toPlanned">How the player plays a song: the key heard (with their transpose), tempo, capo, plays.</param>
-    /// <param name="voice">The keys the singer is comfortable in (songs marked "My key", or transposed).</param>
+    /// <param name="voice">The keys the singer is comfortable in (the keys of the songs marked "I sing this").</param>
     public SetlistSuggestWindow(IReadOnlyList<SongInfo> library, IReadOnlyList<SongInfo> setlist, Func<SongInfo, PlannedSong> toPlanned,
         VoiceRange voice, SongPalette palette, Action<IReadOnlyList<string>> use, Func<IReadOnlyList<string>, Task> saveAs)
     {
@@ -95,11 +95,11 @@ public sealed class SetlistSuggestWindow : Window
         ToolTip.SetTip(_length, "A number of songs, or a time to fill, from the songs' lengths ({duration})");
         foreach (var child in options.Children)
             child.Margin = new Thickness(0, 0, 8, 6);
-        _nearKeys.Content = voice.IsEmpty ? "Stay near my songs' keys" : $"Stay near my keys ({string.Join(", ", voice.Keys.Distinct().Take(6))})";
+        _nearKeys.Content = voice.IsEmpty ? "Stay near my songs' keys" : $"Stay near the keys I sing ({string.Join(", ", voice.Keys.Distinct().Take(6))})";
         _nearKeys.IsEnabled = _picked.Count > 0 || !voice.IsEmpty;
         ToolTip.SetTip(_nearKeys, voice.IsEmpty
-            ? "Prefer keys near the songs in your setlist. Mark songs that sit well for your voice with “My key” and it learns your range."
-            : "Prefer keys near the ones you marked with “My key” or transposed to, and those of the songs in your setlist");
+            ? "Prefer keys near the songs in your setlist. Mark the songs you sing with “I sing this” and it learns the keys you sing in."
+            : "Prefer keys near the ones you sing (songs marked “I sing this”), and those of the songs in your setlist");
         var checks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { _nearKeys, _favorPlayed } };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 10), Children = { intro, options, checks, _suggest, _heading, _summary } };
         DockPanel.SetDock(top, Dock.Top);

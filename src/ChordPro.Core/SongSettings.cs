@@ -17,7 +17,16 @@ public sealed class SongSettings
     public double? Tempo { get; set; }
     /// <summary>How many times the song was played (scrolled or shown in stage mode), for favoring familiar songs in a set.</summary>
     public int Plays { get; set; }
-    /// <summary>The singer marked this song, in its transposed key, as sitting well for their voice.</summary>
+    /// <summary>
+    /// The transposition the singer marked this song at ("I sing this"), so the key they sing it in stays
+    /// put when the song is transposed again; null when it isn't marked. A transposition rather than a key
+    /// name, so it holds for songs without a <c>{key}</c> and keeps the same pitch if the key is edited.
+    /// </summary>
+    public int? SingTranspose { get; set; }
+    /// <summary>
+    /// Read from older files only ("My key", which followed whatever the transposition was);
+    /// <see cref="Upgrade"/> turns it into <see cref="SingTranspose"/>.
+    /// </summary>
     public bool FitsVoice { get; set; }
     /// <summary>The tuning chosen for this song (an instrument name, in the player's family); null to follow the song's <c>{x_tuning}</c>.</summary>
     public string? Tuning { get; set; }
@@ -41,11 +50,21 @@ public sealed class SongSettings
         ScrollMode = other.ScrollMode;
         Tempo = other.Tempo;
         Plays = other.Plays;
+        SingTranspose = other.SingTranspose;
         FitsVoice = other.FitsVoice;
         Tuning = other.Tuning;
         TuningOffset = other.TuningOffset;
         Notes = other.Notes;
         Modified = other.Modified;
+    }
+
+    /// <summary>Brings settings read from an older file up to date: a "My key" mark becomes "I sing this" at the song's transposition.</summary>
+    public void Upgrade()
+    {
+        if (!FitsVoice)
+            return;
+        SingTranspose ??= Transpose;
+        FitsVoice = false;
     }
 }
 
@@ -270,7 +289,10 @@ public sealed class LibrarySongSettings
         try
         {
             var file = JsonSerializer.Deserialize(File.ReadAllText(path), SongSettingsJson.Default.SettingsFile);
-            return new Dictionary<string, SongSettings>(file?.Songs ?? [], StringComparer.Ordinal);
+            var songs = new Dictionary<string, SongSettings>(file?.Songs ?? [], StringComparer.Ordinal);
+            foreach (var settings in songs.Values)
+                settings.Upgrade();
+            return songs;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {

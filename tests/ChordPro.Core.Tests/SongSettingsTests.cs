@@ -179,4 +179,35 @@ public sealed class SongSettingsTests : IDisposable
         Assert.False(library.Save());
         Assert.False(File.Exists(SettingsFile));
     }
+
+    [Fact]
+    public void AnOldMyKeyMarkBecomesISingThisAtItsTransposition()
+    {
+        File.WriteAllText(SettingsFile, """
+            { "version": 1, "songs": { "song.cho": { "transpose": -2, "fitsVoice": true, "modified": "2026-10-01T00:00:00Z" } } }
+            """);
+        var written = File.GetLastWriteTimeUtc(SettingsFile);
+
+        var library = OpenDevice();
+        var song = library.Get("song.cho");
+        Assert.Equal(-2, song?.SingTranspose);
+        Assert.False(song?.FitsVoice);
+
+        Assert.True(library.Save());
+        Assert.Equal(written, File.GetLastWriteTimeUtc(SettingsFile)); // upgrading alone isn't a change
+    }
+
+    [Fact]
+    public void SingingASongAsWrittenIsKept()
+    {
+        var library = OpenDevice();
+        library.GetOrAdd("as-written.cho").SingTranspose = 0;
+        library.GetOrAdd("moved.cho").SingTranspose = 3;
+        Assert.True(library.Save());
+
+        var reopened = OpenDevice();
+        Assert.Equal(0, reopened.Get("as-written.cho")?.SingTranspose);
+        Assert.Equal(3, reopened.Get("moved.cho")?.SingTranspose);
+        Assert.DoesNotContain("fitsVoice", File.ReadAllText(SettingsFile));
+    }
 }

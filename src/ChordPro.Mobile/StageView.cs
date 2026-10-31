@@ -54,6 +54,10 @@ internal sealed class StageView : UserControl
     private readonly Border _footer = new() { Padding = new Thickness(8, 6) };
     private readonly Button _play = new();
     private readonly TextBlock _transposeText = new();
+    private readonly ToggleSwitch _singThis = new();
+    private readonly TextBlock _singNote = new();
+    private readonly TextBlock _backToSungText = new() { VerticalAlignment = VerticalAlignment.Center };
+    private StackPanel? _backToSungSection;
     private readonly TextBlock _speedLabel = new();
     private readonly TextBlock _speedText = new();
     private readonly TextBlock _scrollHint = new();
@@ -422,9 +426,23 @@ internal sealed class StageView : UserControl
         });
     }
 
-    // Aa ▾: text size, transpose and theme; notes and the lock.
+    // Aa ▾: text size, transpose, I sing this and theme; notes and the lock.
     private Control TextPanel()
     {
+        _singThis.IsCheckedChanged += (_, _) =>
+        {
+            if (_updatingChoices)
+                return;
+            _songSettings.SingTranspose = _singThis.IsChecked == true ? _songSettings.Transpose : null;
+            _saved();
+            UpdateTextControls();
+        };
+        // In its own card, so hiding it leaves no stray hairline.
+        _backToSungSection = MenuParts.Section(null, (string?)null, MenuParts.Tappable(_backToSungText, () =>
+        {
+            if (_songSettings.SingTranspose is { } sung)
+                ChangeTranspose(sung - _songSettings.Transpose);
+        }));
         _themeBox.SelectionChanged += (_, _) =>
         {
             if (_updatingChoices || _themeBox.SelectedIndex < 0)
@@ -434,10 +452,12 @@ internal sealed class StageView : UserControl
             Render();
         };
         return MenuParts.Menu("Display",
-            MenuParts.Section("This song", (string?)null,
+            MenuParts.Section("This song", _singNote,
                 MenuParts.StepperRow("Text size", _fontSizeText, () => ChangeFont(-2), () => ChangeFont(+2)),
                 MenuParts.StepperRow("Transpose", _transposeText, () => ChangeTranspose(-1), () => ChangeTranspose(+1)),
+                MenuParts.SwitchRow("I sing this", _singThis),
                 MenuParts.ActionRow("Notes", ShowNotes)),
+            _backToSungSection,
             MenuParts.Section(null, (string?)null, MenuParts.ChoiceRow("Theme", _themeBox)),
             MenuParts.Section(null, "Locked, only page turns and pedals work. Hold to unlock.",
                 MenuParts.ActionRow("Lock the stage", () => SetLocked(true), "🔒")));
@@ -451,6 +471,34 @@ internal sealed class StageView : UserControl
         _fontSizeText.Text = $"{SongFontSize / _deviceFontSize:0%}";
         var transpose = _songSettings.Transpose;
         _transposeText.Text = transpose == 0 ? "0" : transpose.ToString("+0;−0");
+        UpdateSingThis();
+    }
+
+    // The song's key as heard at a transposition ("A"), or the transposition for a song without a {key}.
+    private string SungKeyName(int transpose) =>
+        ChordTransposer.Shift(ChordTransposer.SoundingKey(_song.Key, _song.CapoFret, _keyIncludesCapo, TuningOffset), transpose) is { } key
+            ? key
+            : transpose == 0 ? "the original key" : transpose.ToString("+0;−0");
+
+    private void UpdateSingThis()
+    {
+        var sung = _songSettings.SingTranspose;
+        _updatingChoices = true;
+        _singThis.IsChecked = sung is not null;
+        _updatingChoices = false;
+        // Twelve semitones apart is the same key.
+        var elsewhere = sung is { } at && (at - _songSettings.Transpose) % 12 != 0;
+        if (_backToSungSection is not null)
+            _backToSungSection.IsVisible = elsewhere;
+        if (sung is not { } transpose)
+        {
+            _singNote.Text = "Turn on I sing this for the songs you sing; the key is remembered.";
+            return;
+        }
+        _singNote.Text = elsewhere
+            ? $"You sing this in {SungKeyName(transpose)} (now in {SungKeyName(_songSettings.Transpose)})."
+            : $"You sing this in {SungKeyName(transpose)}.";
+        _backToSungText.Text = $"Back to {SungKeyName(transpose)}";
     }
 
     private void ChangeFont(double step)
